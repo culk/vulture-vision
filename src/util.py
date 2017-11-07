@@ -53,7 +53,7 @@ def normalize_image(image):
     # color? contrast? mean-normalized? values in what range?
     pass
 
-def load_wkt_shape(image_id, classes):
+def load_wkt_shape(image_id, classes='all'):
     '''
     Load WKT shape as a list of Shapely geometric object
     classes:
@@ -68,10 +68,10 @@ def load_wkt_shape(image_id, classes):
         classes = list(range(num_class))
     for cls in classes:
         if cls not in range(num_class):
-            raise InputError('Class {} is not one of {} valid classes.'.format(cls, num_class))
-        wkt_shape = image_shapes[image_shapes.ClassType == cls].MultipolygonWKT
+            raise InputError('Class {} is not one of {} valid classes.'.format(cls + 1, num_class))
+        wkt_shape = image_shapes[image_shapes.ClassType == cls + 1].MultipolygonWKT.values[0]
         shapes.append(wkt.loads(wkt_shape))
-    pass
+    return shapes
 
 def create_mask(image_id, classes):
     '''
