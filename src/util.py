@@ -5,6 +5,7 @@ import pandas as pd
 import tifffile as tiff
 from shapely import wkt
 from shapely.geometry import MultiPolygon, Polygon
+from cv2 import fillPoly
 
 '''
 Global constants
@@ -28,6 +29,7 @@ def load_image(image_id, image_type=None, bands='all'):
     bands:
         -all = load all bands for that type
         -list of bands to load, zero-indexed (i.e. [1, 3, 4])
+    Returns an numpy array with dimensions [height, width, bands]
     '''
     if image_type == None:
         image_folder = 'three_band'
@@ -92,8 +94,7 @@ def convert_shape_to_coords(shape, height, width, xmax, ymin):
         scale_y = height / ymin
         scale_x = width / xmax
         scale = np.array([scale_x, scale_y])
-        coords[:, 1] *= scale_y
-        coords[:, 0] *= scale_x
+        coords *= scale
         coords = np.round(coords).astype(np.int)
         return coords
 
@@ -110,26 +111,33 @@ def convert_shape_to_coords(shape, height, width, xmax, ymin):
     return exteriors, interiors
 
 
-def generate_mask_from_coords(coords):
+def generate_mask_from_coords(height, width, exteriors, interiors):
     '''
     Creates a numpy array bitmask from the specified coordinates
     '''
-    pass
+    mask = np.zeros((height, width), np.uint8)
+    fillPoly(mask, exteriors, 1)
+    fillPoly(mask, interiors, 0)
+    return mask
 
-def create_mask(image_id, height, width, classes):
+def create_mask(image_id, height, width, classes='all'):
     '''
     Load the masks for an image
     height, width: number of pixels
     classes:
         -all = load all classes
         -list of the classes to load, zero-indexed (i.e. [0, 3, 5])
+    Returns a numpy array of masks with dimensions [height, width, classes]
     '''
+    # Based on functions by author: visoft
+    # Link: https://www.kaggle.com/visoft/dstl-satellite-imagery-feature-detection/export-pixel-wise-mask
     masks = []
     xmax, ymin = load_grid_sizes(image_id)
     shapes = load_wkt_shape(image_id, classes)
     for shape in shapes:
         coords = convert_shape_to_coords(shape, height, width, xmax, ymin)
-        masks.append(generate_mask_from_coords(coords))
+        masks.append(generate_mask_from_coords(height, width, coords[0], coords[1]))
+    masks = np.rollaxis(np.array(masks), 0, 3)
     return masks
 
 '''
