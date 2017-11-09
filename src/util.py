@@ -84,11 +84,31 @@ def load_wkt_shape(image_id, classes='all'):
         shapes.append(wkt.loads(wkt_shape))
     return shapes
 
-def convert_shape_to_coords(shape, x, y):
+def convert_shape_to_coords(shape, height, width, xmax, ymin):
     '''
     Returns a list of scalled interior and exterior coordinates from a given shape
     '''
-    pass
+    def scale_coords(coords):
+        scale_y = height / ymin
+        scale_x = width / xmax
+        scale = np.array([scale_x, scale_y])
+        coords[:, 1] *= scale_y
+        coords[:, 0] *= scale_x
+        coords = np.round(coords).astype(np.int)
+        return coords
+
+    exteriors = []
+    interiors = []
+    for i, polygon in enumerate(shape):
+        exterior = np.array(polygon.exterior.coords)
+        scaled_ext = scale_coords(exterior)
+        exteriors.append(scaled_ext)
+        for polygon_interior in polygon.interiors:
+            interior = np.array(polygon_interior.coords)
+            scaled_int = scale_coords(interior)
+            interiors.append(scaled_int)
+    return exteriors, interiors
+
 
 def generate_mask_from_coords(coords):
     '''
@@ -99,6 +119,7 @@ def generate_mask_from_coords(coords):
 def create_mask(image_id, height, width, classes):
     '''
     Load the masks for an image
+    height, width: number of pixels
     classes:
         -all = load all classes
         -list of the classes to load, zero-indexed (i.e. [0, 3, 5])
@@ -106,12 +127,9 @@ def create_mask(image_id, height, width, classes):
     masks = []
     xmax, ymin = load_grid_sizes(image_id)
     shapes = load_wkt_shape(image_id, classes)
-    #TODO:
-    ''' 
     for shape in shapes:
-        coords = convert_shape_to_coords(shape, height, width)
+        coords = convert_shape_to_coords(shape, height, width, xmax, ymin)
         masks.append(generate_mask_from_coords(coords))
-    '''
     return masks
 
 '''
