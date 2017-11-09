@@ -12,6 +12,7 @@ Global constants
 data_directory = '/media/sf_school/project/data/'
 num_class = 10
 wkt_shapes_fn = os.path.join(data_directory, 'train_wkt_v4.csv')
+grid_sizes_fn = os.path.join(data_directory, 'grid_sizes.csv')
 
 '''
 Preprocessing
@@ -53,6 +54,15 @@ def normalize_image(image):
     # color? contrast? mean-normalized? values in what range?
     pass
 
+def load_grid_sizes(image_id):
+    '''
+    returns the xmax and ymin to use to scale the wkt shapes
+    '''
+    grid_sizes_df = pd.read_csv(grid_sizes_fn,
+            names=['ImageId', 'Xmax', 'Ymin'], skiprows=1)
+    xmax, ymin = grid_sizes_df[grid_sizes_df.ImageId == image_id].values[0][1:]
+    return xmax, ymin
+
 def load_wkt_shape(image_id, classes='all'):
     '''
     Load WKT shape as a list of Shapely geometric object
@@ -69,18 +79,40 @@ def load_wkt_shape(image_id, classes='all'):
     for cls in classes:
         if cls not in range(num_class):
             raise InputError('Class {} is not one of {} valid classes.'.format(cls + 1, num_class))
+        # wkt_shape can be an empty multipolygon
         wkt_shape = image_shapes[image_shapes.ClassType == cls + 1].MultipolygonWKT.values[0]
         shapes.append(wkt.loads(wkt_shape))
     return shapes
 
-def create_mask(image_id, classes):
+def convert_shape_to_coords(shape, x, y):
+    '''
+    Returns a list of scalled interior and exterior coordinates from a given shape
+    '''
+    pass
+
+def generate_mask_from_coords(coords):
+    '''
+    Creates a numpy array bitmask from the specified coordinates
+    '''
+    pass
+
+def create_mask(image_id, height, width, classes):
     '''
     Load the masks for an image
     classes:
         -all = load all classes
         -list of the classes to load, zero-indexed (i.e. [0, 3, 5])
     '''
-    pass
+    masks = []
+    xmax, ymin = load_grid_sizes(image_id)
+    shapes = load_wkt_shape(image_id, classes)
+    #TODO:
+    ''' 
+    for shape in shapes:
+        coords = convert_shape_to_coords(shape, height, width)
+        masks.append(generate_mask_from_coords(coords))
+    '''
+    return masks
 
 '''
 Scoring functions
