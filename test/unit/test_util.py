@@ -12,6 +12,14 @@ class UtilTests(unittest.TestCase):
         img = util.load_image(image_id, 'M')
         self.assertEqual(img.shape, (837, 851, 8))
 
+    def test_normalize_image(self):
+        image_id = '6120_2_0'
+        img = util.load_image(image_id, 'M')
+        normalized = util.normalize_image(img)
+        self.assertTrue(np.max(normalized) <= 1)
+        self.assertTrue(np.min(normalized) >= 0)
+        self.assertEqual(img.shape, normalized.shape)
+
     def test_load_grid_sizes(self):
         image_id = '6120_2_0'
         xmax, ymin = util.load_grid_sizes(image_id)

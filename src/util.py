@@ -54,7 +54,13 @@ def normalize_image(image):
     '''
     # TODO: what type of normalization should we do for the models we plan to build?
     # color? contrast? mean-normalized? values in what range?
-    pass
+    normalized = np.zeros_like(image, dtype=np.float64)
+    bands = image.shape[2]
+    for i in range(bands):
+        a = np.min(image[..., i])
+        b = np.max(image[..., i])
+        normalized[..., i] = (image[..., i] - a) / (b - a)
+    return normalized
 
 def load_grid_sizes(image_id):
     '''
