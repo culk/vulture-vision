@@ -38,7 +38,7 @@ def load_image(image_id, image_type=None, bands='all'):
         image_folder = 'sixteen_band/'
         image_name = '{}_{}.tif'.format(image_id, image_type)
     else:
-        raise InputError('incorrect image type: {}'.format(image_type))
+        raise Exception('Incorrect image type: {}'.format(image_type))
     filename = os.path.join(data_directory, image_folder, image_name)
     image = tiff.imread(filename)
     # put image in shape (H x W x bands)
@@ -68,7 +68,8 @@ def load_grid_sizes(image_id):
     '''
     grid_sizes_df = pd.read_csv(grid_sizes_fn,
             names=['ImageId', 'Xmax', 'Ymin'], skiprows=1)
-    xmax, ymin = grid_sizes_df[grid_sizes_df.ImageId == image_id].values[0][1:]
+    grid_sizes = grid_sizes_df[grid_sizes_df.ImageId == image_id]
+    xmax, ymin = grid_sizes.values[0][1:]
     return xmax, ymin
 
 def load_wkt_shape(image_id, classes='all'):
@@ -86,7 +87,7 @@ def load_wkt_shape(image_id, classes='all'):
         classes = list(range(num_class))
     for cls in classes:
         if cls not in range(num_class):
-            raise InputError('Class {} is not one of {} valid classes.'.format(cls + 1, num_class))
+            raise Exception('Class {} is not one of {} valid classes.'.format(cls + 1, num_class))
         # wkt_shape can be an empty multipolygon
         wkt_shape = image_shapes[image_shapes.ClassType == cls + 1].MultipolygonWKT.values[0]
         shapes.append(wkt.loads(wkt_shape))
@@ -144,6 +145,8 @@ def create_mask(image_id, height, width, classes='all'):
         coords = convert_shape_to_coords(shape, height, width, xmax, ymin)
         masks.append(generate_mask_from_coords(height, width, coords[0], coords[1]))
     masks = np.rollaxis(np.array(masks), 0, 3)
+    # remove extra dimensions if only one class was requested
+    masks = np.squeeze(masks)
     return masks
 
 '''
