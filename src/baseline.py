@@ -40,7 +40,7 @@ def image_stitch(ids, img_type='M'):
         print(image_id, image.shape, np.amin(image), np.amax(image))
         X[(i//2) * H:(i//2) * H + H, (i%2) * W:(i%2) * W + W] = image[:H, :W]
         for cls in range(num_class):
-            Y[(i//2) * H:(i//2) * H + H, (i%2) * W:(i%2) * W + W, cls] = create_mask(image.shape[:2], image_id, cls + 1)[:H, :W]
+            Y[(i//2) * H:(i//2) * H + H, (i%2) * W:(i%2) * W + W, cls] = create_mask(image_id, image.shape[0], image.shape[1], [cls])[:H, :W]
     print(np.amax(Y), np.amin(Y))
 
     np.save(os.path.join(data_dir, 'input_{}x{}_{}.npy'.format(H*2, W*2, img_type)), X)
@@ -132,7 +132,7 @@ def predict(model, image_id):
     mask = np.zeros((H, W, num_class))
     print(image_id, image.shape, np.amin(image), np.amax(image))
     for cls in range(num_class):
-        mask[..., cls] = create_mask(image.shape[:2], image_id, cls + 1)[:H, :W]
+        mask[..., cls] = create_mask(image_id, image.shape[0], image.shape[1], [cls])[:H, :W]
     print(np.amax(mask), np.amin(mask))
 
     # use the model to predict the mask
@@ -205,7 +205,7 @@ def predict(model, image_id):
 
 def main():
     # images represent a diversity of features with a focus on man-made features
-    do_training = True
+    do_training = False
     ids = ['6100_2_3', '6110_4_0', '6110_1_2', '6140_3_1']
     test_id = '6100_2_2'
     #image_stitch(ids)
