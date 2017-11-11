@@ -8,6 +8,7 @@ from shapely.geometry import MultiPolygon, Polygon
 from cv2 import fillPoly
 from datetime import datetime
 from scipy.misc import imsave
+import matplotlib.pyplot as plt
 
 '''
 Global constants
@@ -193,8 +194,20 @@ Visualizations
 def plot_compare_masks(true, pred):
     '''
     Plot the true and predicted masks side by side for comparison
+    true, pred: lists of masks that represent the true and predicted labels
     '''
-    pass
+    assert len(true) == len(pred)
+    fig, cls_plts = plt.subplots(len(true), 2)
+    for i, cls_plt in enumerate(cls_plts):
+        cls_plt[0].imshow(true[i])
+        cls_plt[0].set_title('Class {} True Mask'.format(i + 1))
+        cls_plt[0].axis('off')
+        cls_plt[1].imshow(pred[i])
+        cls_plt[1].set_title('Class {} Prediction'.format(i + 1))
+        cls_plt[1].axis('off')
+    plt.tight_layout()
+    plt.show()
+
 
 def plot_image(image):
     '''
