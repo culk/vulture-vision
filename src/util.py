@@ -6,6 +6,8 @@ import tifffile as tiff
 from shapely import wkt
 from shapely.geometry import MultiPolygon, Polygon
 from cv2 import fillPoly
+from datetime import datetime
+from scipy.misc import imsave
 
 '''
 Global constants
@@ -16,7 +18,7 @@ wkt_shapes_fn = os.path.join(data_directory, 'train_wkt_v4.csv')
 grid_sizes_fn = os.path.join(data_directory, 'grid_sizes.csv')
 
 '''
-Preprocessing
+Load/Save
 '''
 def load_image(image_id, image_type=None, bands='all'):
     '''
@@ -48,6 +50,26 @@ def load_image(image_id, image_type=None, bands='all'):
         image = image[..., bands]
     return image
 
+def save_mask(mask, image_id, cls, predicted=False):
+    '''
+    Save a true or predicted mask as an image
+    mask: numpy array of type uint8
+    image_id: image id the mask is associated with
+    cls: the class that the mask represents
+    predicted: (bool) was the mask predicted or the true label
+    '''
+    if predicted:
+        folder_name = 'masks_pred'
+    else:
+        folder_name = 'masks_true'
+    time = datetime.now().strftime('%Y%m%d-%H%M')
+    mask_name = '{}_mask_{}_{}.png'.format(image_id, cls, time)
+    filename = os.path.join(data_directory, folder_name, mask_name)
+    imsave(filename, mask)
+
+'''
+Preprocessing
+'''
 def normalize_image(image):
     '''
     Normalize the image
@@ -164,4 +186,19 @@ def my_jaccard(true, pred):
     union[union > 1] = 1
     union = np.sum(union)
     return intersection/union
+
+'''
+Visualizations
+'''
+def plot_compare_masks(true, pred):
+    '''
+    Plot the true and predicted masks side by side for comparison
+    '''
+    pass
+
+def plot_image(image):
+    '''
+    Plot a grayscale or RGB image
+    '''
+    pass
 
