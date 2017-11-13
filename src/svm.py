@@ -47,7 +47,10 @@ def main():
     # add additional features
     # train
     print('\nBegin training model\n')
-    model = svm.SVC()
+    # The default kernel used from the below call to SVC is very slow
+    #model = svm.SVC()
+    # Use the linear kernel instead:
+    model = svm.LinearSVC()
     samples = train_image.reshape(H * W, -1)
     labels = train_mask.reshape(-1)
     model.fit(samples, labels)
