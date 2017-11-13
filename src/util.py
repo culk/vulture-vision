@@ -121,6 +121,7 @@ def convert_shape_to_coords(shape, height, width, xmax, ymin):
     Returns a list of scalled interior and exterior coordinates from a given shape
     '''
     def scale_coords(coords):
+        #TODO: Scale image with equations from kaggle description
         scale_y = height / ymin
         scale_x = width / xmax
         scale = np.array([scale_x, scale_y])
@@ -198,6 +199,8 @@ def plot_compare_masks(true, pred):
     '''
     assert len(true) == len(pred)
     fig, cls_plts = plt.subplots(len(true), 2)
+    if len(true) == 1:
+        cls_plts = [cls_plts]
     for i, cls_plt in enumerate(cls_plts):
         cls_plt[0].imshow(true[i])
         cls_plt[0].set_title('Class {} True Mask'.format(i + 1))
