@@ -197,18 +197,19 @@ def plot_compare_masks(true, pred):
     Plot the true and predicted masks side by side for comparison
     true, pred: lists of masks that represent the true and predicted labels
     '''
+    # TODO: consider using matplotlib.gridspec to fix plot spacing
     assert len(true) == len(pred)
     fig, cls_plts = plt.subplots(len(true), 2)
     if len(true) == 1:
         cls_plts = [cls_plts]
     for i, cls_plt in enumerate(cls_plts):
         cls_plt[0].imshow(true[i])
-        cls_plt[0].set_title('Class {} True Mask'.format(i + 1))
+        #cls_plt[0].set_title('Class {} True Mask'.format(i + 1))
         cls_plt[0].axis('off')
         cls_plt[1].imshow(pred[i])
-        cls_plt[1].set_title('Class {} Prediction'.format(i + 1))
+        #cls_plt[1].set_title('Class {} Prediction'.format(i + 1))
         cls_plt[1].axis('off')
-    plt.tight_layout()
+    plt.tight_layout(pad=0.0, w_pad=0.0, h_pad=0.0)
     plt.show()
 
 
