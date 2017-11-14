@@ -23,15 +23,29 @@ def load_model():
     model = joblib.load(os.path.join(model_dir, filename))
     return model
 
+def get_laplacian(image, size=3):
+    features = np.zeros_like(image)
+    for i in range(image.shape[2]):
+        features[..., i] = cv2.Laplacian(image[..., i], ddepth=1, ksize=size)
+    return features
+
+def get_gaussian(image, size=3):
+    kernel_shape = (size, size)
+    features = np.zeros_like(image)
+    for i in range(image.shape[2]):
+        features[..., i] = cv2.GaussianBlur(image[..., i], kernel_shape, 0)
+    return features
+
 def main():
     '''
     Simple SVM baseline to predict building footprints
     '''
     # import image
+    H, W = 200, 200
+    add_features = True
     image_id = '6100_2_3'
     image = util.load_image(image_id, 'M')
     image = util.normalize_image(image)
-    H, W = 400, 400
     train_image = image[:H, :W, :]
     test_image = image[:H, W:W * 2, :]
     print('Image loaded with dimensions: {}'.format(image.shape))
@@ -45,6 +59,14 @@ def main():
     print('\tWill train on portion of mask of shape: {}'.format(train_mask.shape))
     print('\tWill test on portion of mask of shape: {}'.format(test_mask.shape))
     # add additional features
+    if add_features:
+        train_features = np.dstack((get_laplacian(train_image, 5), get_gaussian(train_image, 5)))
+        #a = [train_image[..., i] for i in range(train_image.shape[2])]
+        #b = [features[..., i] for i in range(features.shape[2])]
+        #util.plot_compare_masks(a, b)
+        train_image = np.dstack((train_image, train_features))
+        test_features = np.dstack((get_laplacian(test_image, 5), get_gaussian(test_image, 5)))
+        test_image = np.dstack((test_image, test_features))
     # train
     print('\nBegin training model\n')
     # The default kernel used from the below call to SVC is very slow
@@ -54,7 +76,7 @@ def main():
     samples = train_image.reshape(H * W, -1)
     labels = train_mask.reshape(-1)
     model.fit(samples, labels)
-    save_model(model)
+    #save_model(model)
     # test
     print('\nBegin testing model\n')
     test_x = [samples, test_image.reshape(H * W, -1)]
