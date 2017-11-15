@@ -75,7 +75,7 @@ def load_data(labels=False):
     else:
         desc = 'samples'
     filenames = os.listdir(os.path.join(data_dir, 'prepped'))
-    filename = filter(lambda s: desc in s, filenames)[-1]
+    filename = list(filter(lambda s: desc in s, filenames))[-1]
     data = np.load(os.path.join(data_dir, 'prepped', filename))
     return data
 
@@ -89,23 +89,30 @@ def save_results(results):
     dt = datetime.now().strftime('%Y%m%d-%H%M')
     results_filename = 'svm_results_{}.csv'.format(dt)
     with open(os.path.join(results_dir, results_filename), 'w', newline='') as results_file:
-        results_writer = csv.writer(results_file, delimiter=',', quotechar='|',
+        results_writer = csv.writer(results_file, delimiter=';', quotechar='|',
                                     quoting=csv.QUOTE_MINIMAL)
         results_writer.writerow(['model', 'features', 'size', 'jaccard_score'])
-        for (model, features, size), jaccard_score in results.items():
-            results_writer.writerow([model, features, size, jaccard_score])
+        for key, jaccard_score in results.items():
+            model, features, size, sample = key
+            results_writer.writerow([model, features, size, sample, jaccard_score])
 
 '''
 Features
 '''
 def get_laplacian(image, size=3):
+    if len(image.shape) == 2:
+        H, W = image.shape
+        image = image.reshape(H, W, 1)
     features = np.zeros_like(image)
     for i in range(image.shape[2]):
-        features[..., i] = cv2.Laplacian(image[..., i], ddepth=1, ksize=size)
+        features[..., i] = cv2.Laplacian(image[..., i], ddepth=6, ksize=size)
     return features
 
 def get_gaussian(image, size=3):
     kernel_shape = (size, size)
+    if len(image.shape) == 2:
+        H, W = image.shape
+        image = image.reshape(H, W, 1)
     features = np.zeros_like(image)
     for i in range(image.shape[2]):
         features[..., i] = cv2.GaussianBlur(image[..., i], kernel_shape, 0)
@@ -133,7 +140,7 @@ def create_cv(X, Y, k):
         Y_validate[i] = Y[i]
 
 def experiment(X, Y,
-               models=(svm.LinearSVC()),
+               models=('svm',),
                sizes=[10],
                #sizes=[10, 25, 50, 100, 200, 500, 1000], #have 1600 in total right now
                features=(get_laplacian, get_gaussian),
@@ -148,30 +155,31 @@ def experiment(X, Y,
     # randomly sample max(size) subimages
     # create tuple of feature combinations to test
     feature_combinations = [None, (features[0],), (features[1],), features]
-    print(feature_combinations)
     results = dict()
     for size in sizes:
         print('##### Size: {} #####'.format(size))
         # TODO: rotate/flip some samples
         # select first size subimages
         samples = X[:size]
-        labels = Y[:size].reshape(-1, 1)
-        N, H, W, _ = samples.shape
+        labels = Y[:size].reshape(-1)
+        N, H, W, D = samples.shape
         M = labels.shape[0]
         # split labels into train and test
-        test_labels = labels[:N//k]
-        train_labels = labels[N//k:]
+        test_labels = labels[:M//k]
+        train_labels = labels[M//k:]
         assert M == N * H * W
         for feature_combo in feature_combinations:
             iter_samples = np.copy(samples)
             if feature_combo is not None:
+                feature_samples = [iter_samples]
                 for feature_function in feature_combo:
                     # add features for each subimage
-                    new_samples = np.zeros_like(iter_samples)
-                    for i in range(N):
-                        print(iter_samples[i].shape)
-                        new_samples[i] = feature_function(iter_samples[i])
-                    iter_samples = np.stack((iter_samples, new_samples), axis=-1)
+                    new_samples = np.zeros_like(samples)
+                    for i in range(N): # for each image in 1...size
+                        new_samples[i] = feature_function(samples[i])
+                    feature_samples.append(new_samples)
+                iter_samples = np.stack(feature_samples, axis=-1)
+            iter_samples = iter_samples.reshape(N, H, W, -1)
             print(feature_combo)
             print(iter_samples.shape)
             # reshape input and labels
@@ -180,8 +188,8 @@ def experiment(X, Y,
             iter_samples = iter_samples.reshape(-1, D)
             assert M == iter_samples.shape[0]
             # split samples into train and test
-            test_samples = iter_samples[:N//k]
-            train_samples = iter_samples[N//k:]
+            test_samples = iter_samples[:M//k]
+            train_samples = iter_samples[M//k:]
             assert train_samples.shape[0] == train_labels.shape[0]
             for model_name in models:
                 model = None
@@ -196,10 +204,10 @@ def experiment(X, Y,
                 model.fit(train_samples, train_labels)
                 # TODO: cross-validate training
                 # predict mask and calculate scores
-                prediction = model.predict(train_samples)
-                train_score = util.my_jaccard(train_labels, prediction)
-                prediction = model.predict(test_samples)
-                test_score = util.my_jaccard(test_labels, prediction)
+                train_prediction = model.predict(train_samples)
+                train_score = util.my_jaccard(train_labels, train_prediction)
+                test_prediction = model.predict(test_samples)
+                test_score = util.my_jaccard(test_labels, test_prediction)
                 print('Model: {}\t Train: {}\t Test: {}'.format(model_name, train_score,
                                                                 test_score))
                 results[(model_name, feature_combo, size, 'train')] = train_score
@@ -268,10 +276,10 @@ def baseline():
 def main():
     image_ids = ['6100_2_3']
     image_type = 'M'
-    models = ('svm')
+    models = ('svm',)
     sizes = [10]
     features = (get_laplacian, get_gaussian)
-    prepared_data = False
+    prepared_data = True
     # import data
     if not prepared_data:
         data, labels = prep_data(image_ids, max(sizes), image_type)
