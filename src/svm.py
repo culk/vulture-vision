@@ -30,22 +30,52 @@ def load_model():
     model = joblib.load(os.path.join(model_dir, filename))
     return model
 
-def save_data(data):
+def save_data(data, labels=False):
     # save prepped data
     # TODO: compressed using np.savez?
+    if labels:
+        desc = 'labels'
+    else:
+        desc = 'samples'
     dt = datetime.now().strftime('%Y%m%d-%H%M')
-    data_filename = 'samples_{}_{}.npy'.format(data.shape[0], dt)
+    data_filename = '{}_{}_{}.npy'.format(desc, data.shape[0], dt)
     np.save(os.path.join(data_dir, 'prepped', data_filename), data)
 
-def prep_data():
-    # import images
+def prep_data(ids, size, image_type, height=100, width=100, classes=[0]):
+    samples = []
+    labels = []
+    n = 0
+    while len(samples) < size:
+        # import next image
+        if n >= len(ids):
+            raise Exception('Not enough image ideas to generate size of data')
+        image = util.load_image(ids[n], image_type)
+        image = util.normalize_image(image)
+        H, W, _ = image.shape
+        mask = util.create_mask(ids[n], H, W, classes)
+        # add all height x width subregions of the image and mask
+        for i in range(H//height):
+            for j in range(W//width):
+                i_start = i * height
+                i_stop = i_start + height
+                j_start = j * width
+                j_stop = j_start + width
+                samples.append(image[i_start:i_stop, j_start:j_stop])
+                labels.append(mask[i_start:i_stop, j_start:j_stop])
+        n += 1
     # convert into list of 100x100 subimages
-    # save subimages and masks to disk
-    pass
+    samples = np.asarray(samples[:size])
+    labels = np.asarray(labels[:size])
+    return samples, labels
 
-def load_data():
+def load_data(labels=False):
     # load most recently prepped data
-    filename = os.listdir(os.path.join(data_dir, 'prepped'))[-1]
+    if labels:
+        desc = 'labels'
+    else:
+        desc = 'samples'
+    filenames = os.listdir(os.path.join(data_dir, 'prepped'))
+    filename = filter(lambda s: desc in s, filenames)[-1]
     data = np.load(os.path.join(data_dir, 'prepped', filename))
     return data
 
@@ -84,11 +114,30 @@ def get_gaussian(image, size=3):
 '''
 Experiments
 '''
+def create_cv(X, Y, k):
+    # attempt at writing a function to generate cv data sets
+    # TODO: test this
+    N, H, W, D = X.shape
+    validation_size = N // k
+    train_size = N - validation_size
+    X_splits = np.asarray(np.array_split(X, k))
+    Y_splits = np.asarray(np.array_split(Y, k))
+    X_train = np.zeros((k, train_size, H, W, D))
+    Y_train = np.zeros((k, train_size, H, W), dtype=np.int)
+    X_validate = np.zeros((k, validation_size, H, W, D))
+    Y_validate = np.zeros((k, validation_size, H, W), dtype=np.int)
+    for i in range(k):
+        X_train[i] = X[np.arange(k) != i].reshape(train_size, H, W, D)
+        X_validate[i] = X[i]
+        Y_train[i] = Y[np.arange(k) != i].reshape(train_size, H, W)
+        Y_validate[i] = Y[i]
+
 def experiment(X, Y,
                models=(svm.LinearSVC()),
                sizes=[10],
                #sizes=[10, 25, 50, 100, 200, 500, 1000], #have 1600 in total right now
-               features=(get_laplacian, get_gaussian)):
+               features=(get_laplacian, get_gaussian),
+               k=5):
     '''
     Do experiments for all combinations of settings
     Input:
@@ -98,41 +147,65 @@ def experiment(X, Y,
     # labels are corresponding bit masks
     # randomly sample max(size) subimages
     # create tuple of feature combinations to test
-    feature_combinations = [tuple(combinations(features, r))
-                            for r in range(1, len(features) + 1)]
-    feature_combinations.append(None)
+    feature_combinations = [None, (features[0],), (features[1],), features]
     print(feature_combinations)
+    results = dict()
     for size in sizes:
+        print('##### Size: {} #####'.format(size))
         # TODO: rotate/flip some samples
         # select first size subimages
         samples = X[:size]
         labels = Y[:size].reshape(-1, 1)
         N, H, W, _ = samples.shape
         M = labels.shape[0]
+        # split labels into train and test
+        test_labels = labels[:N//k]
+        train_labels = labels[N//k:]
         assert M == N * H * W
         for feature_combo in feature_combinations:
-            for feature in feature_combo:
-                # add features for each subimage
-                new_samples = np.zeros_like(samples)
-                for i in range(samples.shape[0]):
-                    new_samples[i] = feature_function(samples[i])
-                samples = np.dstack(samples, new_samples)
+            iter_samples = np.copy(samples)
+            if feature_combo is not None:
+                for feature_function in feature_combo:
+                    # add features for each subimage
+                    new_samples = np.zeros_like(iter_samples)
+                    for i in range(N):
+                        print(iter_samples[i].shape)
+                        new_samples[i] = feature_function(iter_samples[i])
+                    iter_samples = np.stack((iter_samples, new_samples), axis=-1)
+            print(feature_combo)
+            print(iter_samples.shape)
             # reshape input and labels
-            D = samples.shape[-1]
-            samples = samples.reshape(-1, D) # M x D [number of pixels, number of bands]
-            assert samples.shape[0] == M
-            for model_name in models: # logistic regression / svm
+            D = iter_samples.shape[-1]
+            # M x D [number of pixels, number of bands]
+            iter_samples = iter_samples.reshape(-1, D)
+            assert M == iter_samples.shape[0]
+            # split samples into train and test
+            test_samples = iter_samples[:N//k]
+            train_samples = iter_samples[N//k:]
+            assert train_samples.shape[0] == train_labels.shape[0]
+            for model_name in models:
+                model = None
                 if model_name == 'svm':
                     model = svm.LinearSVC()
                 elif model_name == 'lr':
                     # TODO: implement logistic regression
                     break
+                else:
+                    break
                 # train model
-                model.fit(samples, labels)
-                # crossvalidate model?
-                # record model results, as csv?
-                #   jaccard score, 
-                # save copy of model?
+                model.fit(train_samples, train_labels)
+                # TODO: cross-validate training
+                # predict mask and calculate scores
+                prediction = model.predict(train_samples)
+                train_score = util.my_jaccard(train_labels, prediction)
+                prediction = model.predict(test_samples)
+                test_score = util.my_jaccard(test_labels, prediction)
+                print('Model: {}\t Train: {}\t Test: {}'.format(model_name, train_score,
+                                                                test_score))
+                results[(model_name, feature_combo, size, 'train')] = train_score
+                results[(model_name, feature_combo, size, 'test')] = test_score
+                save_model(model)
+    return results
 
 def baseline():
     '''
@@ -193,13 +266,23 @@ def baseline():
     util.plot_compare_masks(true, predictions)
 
 def main():
+    image_ids = ['6100_2_3']
+    image_type = 'M'
     models = ('svm')
     sizes = [10]
+    features = (get_laplacian, get_gaussian)
+    prepared_data = False
     # import data
-    data = None
-    labels = None
-    experiment(data, labels, models, sizes, features=(get_laplacian, get_gaussian))
+    if not prepared_data:
+        data, labels = prep_data(image_ids, max(sizes), image_type)
+        save_data(data)
+        save_data(labels, True)
+    else:
+        data = load_data()
+        labels = load_data(labels=True)
+    results = experiment(data, labels, models, sizes, features)
+    save_results(results)
 
 if __name__ == '__main__':
-    baseline()
+    main()
 
