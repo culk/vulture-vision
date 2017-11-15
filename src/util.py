@@ -182,12 +182,20 @@ def my_jaccard(true, pred):
     true, pred = binary masks of the same size representing the actual and predicted mask
     '''
     true = true.flatten()
-    pred = np.rint(pred.flatten())
+    pred = np.rint(pred.flatten()).astype(np.uint8)
+    assert true.shape == pred.shape
+    true[true > 1] = 1
+    pred[pred > 1] = 1
     intersection = np.sum(true * pred)
     union = true + pred
     union[union > 1] = 1
     union = np.sum(union)
-    return intersection/union
+    if union == 0:
+        return 0.0
+    score = intersection/union
+    if np.isnan(score):
+        score = 0.0
+    return score
 
 '''
 Visualizations
