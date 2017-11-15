@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import cv2
 from datetime import datetime
 import csv
-from sklearn import svm
+import random
+from sklearn import svm, linear_model
 from sklearn.externals import joblib
 from itertools import combinations
 import util
@@ -49,10 +50,14 @@ def prep_data(ids, size, image_type, height=100, width=100, classes=[0]):
         # import next image
         if n >= len(ids):
             raise Exception('Not enough image ideas to generate size of data')
-        image = util.load_image(ids[n], image_type)
-        image = util.normalize_image(image)
-        H, W, _ = image.shape
-        mask = util.create_mask(ids[n], H, W, classes)
+        try:
+            image = util.load_image(ids[n], image_type)
+            image = util.normalize_image(image)
+            H, W, _ = image.shape
+            mask = util.create_mask(ids[n], H, W, classes)
+        except:
+            n += 1
+            continue
         # add all height x width subregions of the image and mask
         for i in range(H//height):
             for j in range(W//width):
@@ -87,11 +92,11 @@ def save_results(results):
               and values that are the jaccard score
     '''
     dt = datetime.now().strftime('%Y%m%d-%H%M')
-    results_filename = 'svm_results_{}.csv'.format(dt)
+    results_filename = 'ex0_results_{}.csv'.format(dt)
     with open(os.path.join(results_dir, results_filename), 'w', newline='') as results_file:
         results_writer = csv.writer(results_file, delimiter=';', quotechar='|',
                                     quoting=csv.QUOTE_MINIMAL)
-        results_writer.writerow(['model', 'features', 'size', 'jaccard_score'])
+        results_writer.writerow(['model', 'features', 'size', 'sample', 'jaccard_score'])
         for key, jaccard_score in results.items():
             model, features, size, sample = key
             results_writer.writerow([model, features, size, sample, jaccard_score])
@@ -155,8 +160,8 @@ def experiment(X, Y,
     # randomly sample max(size) subimages
     # create tuple of feature combinations to test
     feature_combinations = [None, (features[0],), (features[1],), features]
-    results = dict()
     for size in sizes:
+        results = dict()
         print('##### Size: {} #####'.format(size))
         # TODO: rotate/flip some samples
         # select first size subimages
@@ -195,9 +200,8 @@ def experiment(X, Y,
                 model = None
                 if model_name == 'svm':
                     model = svm.LinearSVC()
-                elif model_name == 'lr':
-                    # TODO: implement logistic regression
-                    break
+                elif model_name == 'logistic':
+                    model = linear_model.LogisticRegression()
                 else:
                     break
                 # train model
@@ -207,13 +211,14 @@ def experiment(X, Y,
                 train_prediction = model.predict(train_samples)
                 train_score = util.my_jaccard(train_labels, train_prediction)
                 test_prediction = model.predict(test_samples)
+                # TODO: score breaks when the mask has zero of the class
                 test_score = util.my_jaccard(test_labels, test_prediction)
                 print('Model: {}\t Train: {}\t Test: {}'.format(model_name, train_score,
                                                                 test_score))
                 results[(model_name, feature_combo, size, 'train')] = train_score
                 results[(model_name, feature_combo, size, 'test')] = test_score
-                save_model(model)
-    return results
+                #save_model(model)
+        save_results(results)
 
 def baseline():
     '''
@@ -274,22 +279,35 @@ def baseline():
     util.plot_compare_masks(true, predictions)
 
 def main():
-    image_ids = ['6100_2_3']
+    '''
+    image_ids = []
+    for x in range(6010, 6181, 10):
+        for y in range(0, 5):
+            for z in range(0, 5):
+                i = '{}_{}_{}'.format(x, y, z)
+                image_ids.insert(random.randint(0, len(image_ids)), i)
+    #image_ids = ['6100_2_3']
+    '''
+    image_ids = ['6100_2_3', '6120_2_2', '6120_2_0', '6100_1_3',
+                 '6110_4_0', '6140_3_1', '6110_1_2', '6140_1_2',
+                 '6110_3_1', '6060_2_3', '6070_2_3', '6100_2_2']
     image_type = 'M'
-    models = ('svm',)
-    sizes = [10]
+    models = ('svm', 'logistic')
+    sizes = [10, 25, 50, 100, 250, 500, 750]
     features = (get_laplacian, get_gaussian)
-    prepared_data = True
+    prepared_data = False
     # import data
     if not prepared_data:
+        print('Preparing Data')
         data, labels = prep_data(image_ids, max(sizes), image_type)
         save_data(data)
         save_data(labels, True)
     else:
         data = load_data()
         labels = load_data(labels=True)
-    results = experiment(data, labels, models, sizes, features)
-    save_results(results)
+    experiment(data, labels, models, sizes, features)
+    #results = experiment(data, labels, models, sizes, features)
+    #save_results(results)
 
 if __name__ == '__main__':
     main()
