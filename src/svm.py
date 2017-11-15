@@ -19,9 +19,9 @@ data_dir = '/media/sf_school/project/data/'
 '''
 File I/O
 '''
-def save_model(model):
+def save_model(model, name, size):
     dt = datetime.now().strftime('%Y%m%d-%H%M')
-    model_filename = 'svm_{}.pkl'.format(dt)
+    model_filename = '{}_{}_{}.pkl'.format(name, size, dt)
     print('Saving model to disk: {}'.format(os.path.join(model_dir, model_filename)))
     joblib.dump(model, os.path.join(model_dir, model_filename))
 
@@ -46,10 +46,12 @@ def prep_data(ids, size, image_type, height=100, width=100, classes=[0]):
     samples = []
     labels = []
     n = 0
+    threshold = 5
     while len(samples) < size:
         # import next image
         if n >= len(ids):
-            raise Exception('Not enough image ideas to generate size of data')
+            print(len(samples))
+            raise Exception('Not enough images to generate size of data')
         try:
             image = util.load_image(ids[n], image_type)
             image = util.normalize_image(image)
@@ -65,6 +67,8 @@ def prep_data(ids, size, image_type, height=100, width=100, classes=[0]):
                 i_stop = i_start + height
                 j_start = j * width
                 j_stop = j_start + width
+                if np.sum(mask[i_start:i_stop, j_start:j_stop]) < threshold:
+                    continue
                 samples.append(image[i_start:i_stop, j_start:j_stop])
                 labels.append(mask[i_start:i_stop, j_start:j_stop])
         n += 1
@@ -92,7 +96,7 @@ def save_results(results):
               and values that are the jaccard score
     '''
     dt = datetime.now().strftime('%Y%m%d-%H%M')
-    results_filename = 'ex0_results_{}.csv'.format(dt)
+    results_filename = 'ex1_results_{}.csv'.format(dt)
     with open(os.path.join(results_dir, results_filename), 'w', newline='') as results_file:
         results_writer = csv.writer(results_file, delimiter=';', quotechar='|',
                                     quoting=csv.QUOTE_MINIMAL)
@@ -157,11 +161,14 @@ def experiment(X, Y,
     '''
     # data is list of subimages, each 100x100
     # labels are corresponding bit masks
-    # randomly sample max(size) subimages
     # create tuple of feature combinations to test
     feature_combinations = [None, (features[0],), (features[1],), features]
     for size in sizes:
         results = dict()
+        # randomly order subimages
+        order = np.random.permutation(X.shape[0])
+        X = X[order]
+        Y = Y[order]
         print('##### Size: {} #####'.format(size))
         # TODO: rotate/flip some samples
         # select first size subimages
@@ -187,15 +194,14 @@ def experiment(X, Y,
             iter_samples = iter_samples.reshape(N, H, W, -1)
             print(feature_combo)
             print(iter_samples.shape)
-            # reshape input and labels
+            # reshape samples to M x D [number of pixels, number of bands]
             D = iter_samples.shape[-1]
-            # M x D [number of pixels, number of bands]
             iter_samples = iter_samples.reshape(-1, D)
-            assert M == iter_samples.shape[0]
             # split samples into train and test
             test_samples = iter_samples[:M//k]
             train_samples = iter_samples[M//k:]
             assert train_samples.shape[0] == train_labels.shape[0]
+            assert test_samples.shape[0] == test_labels.shape[0]
             for model_name in models:
                 model = None
                 if model_name == 'svm':
@@ -217,7 +223,8 @@ def experiment(X, Y,
                                                                 test_score))
                 results[(model_name, feature_combo, size, 'train')] = train_score
                 results[(model_name, feature_combo, size, 'test')] = test_score
-                #save_model(model)
+                if size > 50 and feature_combo is not None and len(feature_combo) == 2:
+                    save_model(model, model_name, size)
         save_results(results)
 
 def baseline():
@@ -293,7 +300,7 @@ def main():
                  '6110_3_1', '6060_2_3', '6070_2_3', '6100_2_2']
     image_type = 'M'
     models = ('svm', 'logistic')
-    sizes = [10, 25, 50, 100, 250, 500, 750]
+    sizes = [10, 25, 50, 100, 200, 300]
     features = (get_laplacian, get_gaussian)
     prepared_data = False
     # import data
