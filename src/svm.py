@@ -13,6 +13,7 @@ import util
 #cv2.getGaborKernel(ksize, sigma, theta, lambd, gamma[, psi[, ktype]])
 model_dir = '/media/sf_school/project/models/'
 results_dir = '/media/sf_school/project/results/'
+data_dir = '/media/sf_school/project/data/'
 
 '''
 File I/O
@@ -29,9 +30,12 @@ def load_model():
     model = joblib.load(os.path.join(model_dir, filename))
     return model
 
-def save_data():
+def save_data(data):
     # save prepped data
-    pass
+    # TODO: compressed using np.savez?
+    dt = datetime.now().strftime('%Y%m%d-%H%M')
+    data_filename = 'samples_{}_{}.npy'.format(data.shape[0], dt)
+    np.save(os.path.join(data_dir, 'prepped', data_filename), data)
 
 def prep_data():
     # import images
@@ -40,8 +44,10 @@ def prep_data():
     pass
 
 def load_data():
-    # load already prepped data
-    pass
+    # load most recently prepped data
+    filename = os.listdir(os.path.join(data_dir, 'prepped'))[-1]
+    data = np.load(os.path.join(data_dir, 'prepped', filename))
+    return data
 
 def save_results(results):
     '''
