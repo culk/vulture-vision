@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from datetime import datetime
+import csv
 from sklearn import svm
 from sklearn.externals import joblib
 from itertools import combinations
@@ -11,6 +12,7 @@ import util
 # TODO: which filters to use?
 #cv2.getGaborKernel(ksize, sigma, theta, lambd, gamma[, psi[, ktype]])
 model_dir = '/media/sf_school/project/models/'
+results_dir = '/media/sf_school/project/results/'
 
 '''
 File I/O
@@ -40,6 +42,22 @@ def prep_data():
 def load_data():
     # load already prepped data
     pass
+
+def save_results(results):
+    '''
+    Writes the results of the experiment to a csv file in the results_dir
+    Input:
+    results - a dictionary with keys that are tuples of (model_name, features, size)
+              and values that are the jaccard score
+    '''
+    dt = datetime.now().strftime('%Y%m%d-%H%M')
+    results_filename = 'svm_results_{}.csv'.format(dt)
+    with open(os.path.join(results_dir, results_filename), 'w', newline='') as results_file:
+        results_writer = csv.writer(results_file, delimiter=',', quotechar='|',
+                                    quoting=csv.QUOTE_MINIMAL)
+        results_writer.writerow(['model', 'features', 'size', 'jaccard_score'])
+        for (model, features, size), jaccard_score in results.items():
+            results_writer.writerow([model, features, size, jaccard_score])
 
 '''
 Features
@@ -78,7 +96,7 @@ def experiment(X, Y,
                             for r in range(1, len(features) + 1)]
     feature_combinations.append(None)
     print(feature_combinations)
-    for size in sizes
+    for size in sizes:
         # TODO: rotate/flip some samples
         # select first size subimages
         samples = X[:size]
