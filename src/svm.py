@@ -5,12 +5,16 @@ import cv2
 from datetime import datetime
 from sklearn import svm
 from sklearn.externals import joblib
+from itertools import combinations
 import util
 
 # TODO: which filters to use?
 #cv2.getGaborKernel(ksize, sigma, theta, lambd, gamma[, psi[, ktype]])
 model_dir = '/media/sf_school/project/models/'
 
+'''
+File I/O
+'''
 def save_model(model):
     dt = datetime.now().strftime('%Y%m%d-%H%M')
     model_filename = 'svm_{}.pkl'.format(dt)
@@ -23,6 +27,23 @@ def load_model():
     model = joblib.load(os.path.join(model_dir, filename))
     return model
 
+def save_data():
+    # save prepped data
+    pass
+
+def prep_data():
+    # import images
+    # convert into list of 100x100 subimages
+    # save subimages and masks to disk
+    pass
+
+def load_data():
+    # load already prepped data
+    pass
+
+'''
+Features
+'''
 def get_laplacian(image, size=3):
     features = np.zeros_like(image)
     for i in range(image.shape[2]):
@@ -36,7 +57,60 @@ def get_gaussian(image, size=3):
         features[..., i] = cv2.GaussianBlur(image[..., i], kernel_shape, 0)
     return features
 
-def main():
+'''
+Experiments
+'''
+def experiment(X, Y,
+               models=(svm.LinearSVC()),
+               sizes=[10],
+               #sizes=[10, 25, 50, 100, 200, 500, 1000], #have 1600 in total right now
+               features=(get_laplacian, get_gaussian)):
+    '''
+    Do experiments for all combinations of settings
+    Input:
+    X - numpy array of the images of shape (num_subimages, H, W, D)
+    '''
+    # data is list of subimages, each 100x100
+    # labels are corresponding bit masks
+    # randomly sample max(size) subimages
+    # create tuple of feature combinations to test
+    feature_combinations = [tuple(combinations(features, r))
+                            for r in range(1, len(features) + 1)]
+    feature_combinations.append(None)
+    print(feature_combinations)
+    for size in sizes
+        # TODO: rotate/flip some samples
+        # select first size subimages
+        samples = X[:size]
+        labels = Y[:size].reshape(-1, 1)
+        N, H, W, _ = samples.shape
+        M = labels.shape[0]
+        assert M == N * H * W
+        for feature_combo in feature_combinations:
+            for feature in feature_combo:
+                # add features for each subimage
+                new_samples = np.zeros_like(samples)
+                for i in range(samples.shape[0]):
+                    new_samples[i] = feature_function(samples[i])
+                samples = np.dstack(samples, new_samples)
+            # reshape input and labels
+            D = samples.shape[-1]
+            samples = samples.reshape(-1, D) # M x D [number of pixels, number of bands]
+            assert samples.shape[0] == M
+            for model_name in models: # logistic regression / svm
+                if model_name == 'svm':
+                    model = svm.LinearSVC()
+                elif model_name == 'lr':
+                    # TODO: implement logistic regression
+                    break
+                # train model
+                model.fit(samples, labels)
+                # crossvalidate model?
+                # record model results, as csv?
+                #   jaccard score, 
+                # save copy of model?
+
+def baseline():
     '''
     Simple SVM baseline to predict building footprints
     '''
@@ -94,6 +168,14 @@ def main():
     print('Ploting predictions')
     util.plot_compare_masks(true, predictions)
 
+def main():
+    models = ('svm')
+    sizes = [10]
+    # import data
+    data = None
+    labels = None
+    experiment(data, labels, models, sizes, features=(get_laplacian, get_gaussian))
+
 if __name__ == '__main__':
-    main()
+    baseline()
 
