@@ -25,9 +25,10 @@ def save_model(model, name, size):
     print('Saving model to disk: {}'.format(os.path.join(model_dir, model_filename)))
     joblib.dump(model, os.path.join(model_dir, model_filename))
 
-def load_model():
+def load_model(filename=None):
     # load most recent model
-    filename = os.listdir(model_dir)[-1]
+    if filename is None:
+        filename = os.listdir(model_dir)[-1]
     model = joblib.load(os.path.join(model_dir, filename))
     return model
 
@@ -285,6 +286,24 @@ def baseline():
     print('Ploting predictions')
     util.plot_compare_masks(true, predictions)
 
+def make_proposal_graphic():
+    image_id = '6100_2_3'
+    image_type = 'M'
+    image = util.load_image(image_id, 'M')
+    image = util.normalize_image(image)
+    H, W, _ = image.shape
+    mask = util.create_mask(image_id, H, W, classes=[0])
+    features = np.dstack((get_laplacian(image, 3), get_gaussian(image, 3)))
+    image = np.dstack((image, features)).reshape(H, W, -1)
+    D = image.shape[-1]
+    samples = image.reshape(-1, D)
+    labels = mask.reshape(-1)
+    model = load_model('logistic_10_20171115-1218.pkl')
+    prediction = model.predict(samples)
+    true = [labels.reshape(H, W)]
+    predictions = [prediction.reshape(H, W)]
+    util.plot_compare_masks(true, predictions)
+
 def main():
     '''
     image_ids = []
@@ -317,5 +336,5 @@ def main():
     #save_results(results)
 
 if __name__ == '__main__':
-    main()
+    make_proposal_graphic()
 
