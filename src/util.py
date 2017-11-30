@@ -40,6 +40,8 @@ def load_image(image_id, image_type=None, bands='all'):
     elif image_type in ['P', 'M', 'A']:
         image_folder = 'sixteen_band/'
         image_name = '{}_{}.tif'.format(image_id, image_type)
+    elif image_type == 'landsat':
+        return load_landsat_image(image_id, bands)
     else:
         raise Exception('Incorrect image type: {}'.format(image_type))
     filename = os.path.join(data_directory, image_folder, image_name)
@@ -50,6 +52,26 @@ def load_image(image_id, image_type=None, bands='all'):
         bands = np.array(bands)
         image = image[..., bands]
     return image
+
+def load_landsat_image(image_id, bands):
+    image_name = image_id + '_{}.tif'
+    if bands == 'all':
+        bands = ['B' + str(i) for i in list(range(1, 6)) + [7]]
+    image_folder = 'landsat/'
+    image = []
+    for band in bands:
+        filename = os.path.join(data_directory, image_folder, image_name.format(band))
+        image.append(tiff.imread(filename))
+    image = np.array(image)
+    image = np.rollaxis(image, 0, 3)
+    return image
+
+def load_census_mask(image_id):
+    mask_name = image_id + '.tif'
+    mask_folder = 'masks_census/'
+    filename = os.path.join(data_directory, mask_folder, mask_name)
+    mask = tiff.imread(filename)
+    return mask
 
 def save_mask(mask, image_id, cls, predicted=False):
     '''
