@@ -173,6 +173,17 @@ def generate_mask_from_coords(height, width, exteriors, interiors):
     fillPoly(mask, interiors, 0)
     return mask
 
+def blur_mask(image, size=5)
+    kernel_shape = (size, size)
+    if len(image.shape) >= 2:
+        H, W = image.shape
+        image = image.reshape(H, W, 1)
+    features = np.zeros_like(image)
+    length = image.shape[2]
+    for i in range(0:length):
+        features[..., i] = cv2.GaussianBlur([... i], kernel_shape, 0)
+    return features
+
 def create_mask(image_id, height, width, classes='all'):
     '''
     Load the masks for an image
