@@ -5,7 +5,7 @@ import pandas as pd
 import tifffile as tiff
 from shapely import wkt
 from shapely.geometry import MultiPolygon, Polygon
-from cv2 import fillPoly
+import cv2
 from datetime import datetime
 from scipy.misc import imsave
 import matplotlib.pyplot as plt
