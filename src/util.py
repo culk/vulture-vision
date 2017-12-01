@@ -2,7 +2,6 @@ import os
 import random
 import numpy as np
 import pandas as pd
-import tifffile as tiff
 from shapely import wkt
 from shapely.geometry import MultiPolygon, Polygon
 import cv2
@@ -13,7 +12,7 @@ import matplotlib.pyplot as plt
 '''
 Global constants
 '''
-data_directory = '/media/sf_school/project/data/'
+data_directory = '~/Downloads/'
 num_class = 10
 wkt_shapes_fn = os.path.join(data_directory, 'train_wkt_v4.csv')
 grid_sizes_fn = os.path.join(data_directory, 'grid_sizes.csv')
@@ -173,15 +172,15 @@ def generate_mask_from_coords(height, width, exteriors, interiors):
     fillPoly(mask, interiors, 0)
     return mask
 
-def blur_mask(image, size=5)
+def blur_mask(image, size=5):
     kernel_shape = (size, size)
     if len(image.shape) >= 2:
         H, W = image.shape
         image = image.reshape(H, W, 1)
     features = np.zeros_like(image)
     length = image.shape[2]
-    for i in range(0:length):
-        features[..., i] = cv2.GaussianBlur([... i], kernel_shape, 0)
+    for i in range(length):
+        features[..., i] = cv2.GaussianBlur([..., i], kernel_shape, 0)
     return features
 
 def create_mask(image_id, height, width, classes='all'):
@@ -258,5 +257,4 @@ def plot_image(image):
     '''
     Plot a grayscale or RGB image
     '''
-    pass
-
+pass
