@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pandas as pd
+import tifffile as tiff
 from shapely import wkt
 from shapely.geometry import MultiPolygon, Polygon
 import cv2
