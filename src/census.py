@@ -40,52 +40,12 @@ def create_sub_image_grid(image, mask, grid_size=100):
 
 def calculate_census_weights(Y):
     '''
-    return vector of weights same length as number of sub_images, each
+    Return vector of weights same length as number of sub_images, each
     weight corresponds to the percent of population within that sub_image
     '''
     weights = np.sum(Y * square_km_per_pixel, axis=(1, 2))
     weights = weights / np.sum(weights)
     return weights
-
-# this is actually training and dev sets...
-# TODO: remove this function after implementing saving/loading of prepped data
-def gen_test_dev_sets(img_type='M'):
-    sample_size = 100
-    dev_size = int(sample_size * .2)
-    
-    if img_type == 'M':
-        H, W = 800, 800
-    else:
-        print('unsupported image type')
-        return 0
-
-    image = np.load(os.path.join(data_dir, 'input_{}x{}_{}.npy'.format(H*2, W*2, img_type)))
-    mask = np.load(os.path.join(data_dir, 'mask_{}x{}_{}.npy'.format(H*2, W*2, num_class)))
-
-    print("\nbegin dividing samples")
-    sub_h, sub_w = 160, 160
-    indices = np.random.permutation(sample_size)
-    train_indices = indices[dev_size:]
-    dev_indices = indices[:dev_size]
-    sub_images = []
-    sub_masks = []
-    for i in range(10):
-        for j in range(10):
-            sub_images.append(image[i*sub_h:i*sub_h + sub_h, j*sub_w:j*sub_w + sub_w])
-            sub_masks.append(mask[i*sub_h:i*sub_h + sub_h, j*sub_w:j*sub_w + sub_w])
-    sub_images = np.transpose(sub_images, (0, 3, 1, 2))
-    sub_masks = np.transpose(sub_masks, (0, 3, 1, 2))
-    train_X = sub_images[train_indices]
-    train_Y = sub_masks[train_indices]
-    dev_X = sub_images[dev_indices]
-    dev_Y = sub_masks[dev_indices]
-    print("train dims = \t{} {}".format(train_X.shape, train_Y.shape))
-    print("dev dims = \t{} {}".format(dev_X.shape, dev_Y.shape))
-
-    np.save(os.path.join(data_dir, 'train_input_{}x{}_{}'.format(H*2, W*2, img_type)), train_X)
-    np.save(os.path.join(data_dir, 'train_mask_{}x{}_{}'.format(H*2, W*2, num_class)), train_Y)
-    np.save(os.path.join(data_dir, 'dev_input_{}x{}_{}'.format(H*2, W*2, img_type)), dev_X)
-    np.save(os.path.join(data_dir, 'dev_mask_{}x{}_{}'.format(H*2, W*2, num_class)), dev_Y)
 
 '''
 Models
@@ -113,26 +73,9 @@ def create_simple_cnn():
     model.compile(optimizer=Adam(), loss='mean_squared_logarithmic_error')
     return model
 
-# TODO: replace this function once saving and loading models/prepped data is implemented
-def train(model):
-    n_iters = 2
-    weights_filename_cp = '/media/sf_school/project/weights/baseline_{epoch:02d}-{val_acc:.2f}.hdf5'
-    weights_filename = '/media/sf_school/project/weights/baseline_finish.hdf5'
-    H, W = 800, 800
-    img_type = 'M'
-    train_X = np.load(os.path.join(data_dir, 'train_input_{}x{}_{}.npy'.format(H*2, W*2, img_type)))
-    train_Y = np.load(os.path.join(data_dir, 'train_mask_{}x{}_{}.npy'.format(H*2, W*2, num_class)))
-    dev_X = np.load(os.path.join(data_dir, 'dev_input_{}x{}_{}.npy'.format(H*2, W*2, img_type)))
-    dev_Y = np.load(os.path.join(data_dir, 'dev_mask_{}x{}_{}.npy'.format(H*2, W*2, num_class)))
-    
-    print("begin training on {} samples".format(train_X.shape[0]))
-    checkpoint = ModelCheckpoint(weights_filename_cp, monitor='loss', save_best_only=True)
-    # for once I know the scores are calculated correctly
-    model.load_weights(weights_filename)
-    model.fit(train_X, train_Y, batch_size=10, epochs=n_iters, verbose=2,
-              callbacks=[checkpoint], validation_data=(dev_X, dev_Y))
-    model.save_weights(weights_filename)
-
+'''
+Main
+'''
 def main():
     # settings
     do_training = True
