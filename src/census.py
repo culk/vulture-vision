@@ -1,6 +1,7 @@
 import os
 import matplotlib.pyplot as plt
 import numpy as np
+#from sklearn.metrics import r2_score
 from keras.models import Model
 from keras import layers
 from keras.optimizers import Adam
@@ -125,9 +126,9 @@ def create_simple_cnn():
     conv32 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same')(conv31)
     #up2 = layers.UpSampling2D(size=(2, 2))(conv32)
 
-    final = layers.Conv2D(1, 1, strides=1, activation='sigmoid')(conv32)
+    final = layers.Conv2D(1, 1, strides=1, activation='linear')(conv32)
     model = Model(inputs=inputs, outputs=final)
-    model.compile(optimizer=Adam(), loss='mean_squared_logarithmic_error', metrics=['accuracy'])
+    model.compile(optimizer=Adam(), loss='mean_squared_logarithmic_error')
     return model
 
 def train(model):
@@ -261,19 +262,19 @@ def main():
             else:
                 X = np.concatenate((X, sub_x))
                 Y = np.concatenate((Y, sub_y))
-        print(X.shape, np.min(X), np.max(X))
-        print(Y.shape, np.min(Y), np.max(Y))
+        print(X.shape, np.min(X), np.max(X), np.mean(X), X.dtype)
+        print(Y.shape, np.min(Y), np.max(Y), np.mean(Y), Y.dtype)
         # calculate weights of sub_images and randomly sample them to build train/cv set
         weights = calculate_census_weights(Y)
         N, *_ = weights.shape
         selection = np.random.choice(N, size=data_set_size, replace=False, p=weights)
         X = X[selection]
         Y = np.expand_dims(Y[selection], axis=-1)
+        print(X.shape, np.min(X), np.max(X), np.mean(X), X.dtype)
+        print(Y.shape, np.min(Y), np.max(Y), np.mean(Y), Y.dtype)
     # TODO: update the model to accept the new data size and to do the train/cv
     model = create_simple_cnn()
     if do_training:
-        print(X.shape)
-        print(Y.shape)
         model.summary()
         model.fit(X, Y, batch_size=10, epochs=n_iters, verbose=2, validation_split=0.2)
 
