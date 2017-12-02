@@ -188,14 +188,10 @@ def generate_mask_from_coords(height, width, exteriors, interiors):
 
 def blur_mask(image, size=5):
     kernel_shape = (size, size)
-    if len(image.shape) >= 2:
-        H, W = image.shape
-        image = image.reshape(H, W, 1)
-    features = np.zeros_like(image)
-    length = image.shape[2]
-    for i in range(length):
-        features[..., i] = cv2.GaussianBlur([..., i], kernel_shape, 0)
-    return features
+    print(np.sum(image))
+    blurred = cv2.GaussianBlur(image, kernel_shape, 0)
+    print(np.sum(blurred))
+    return blurred
 
 def create_mask(image_id, height, width, classes='all'):
     '''
@@ -246,23 +242,25 @@ def my_jaccard(true, pred):
 '''
 Visualizations
 '''
-def plot_compare_masks(true, pred):
+def plot_compare_masks(x, y_true, y_pred):
     '''
     Plot the true and predicted masks side by side for comparison
     true, pred: lists of masks that represent the true and predicted labels
     '''
     # TODO: consider using matplotlib.gridspec to fix plot spacing
-    assert len(true) == len(pred)
-    fig, plts = plt.subplots(len(true), 2)
-    if len(true) == 1:
+    assert len(y_true) == len(y_pred) and len(x) == len(y_true)
+    fig, plts = plt.subplots(len(x), 3)
+    if len(y_true) == 1:
         plts = [plts]
     for i, i_plt in enumerate(plts):
-        i_plt[0].imshow(true[i].squeeze())
-        #cls_plt[0].set_title('Class {} True Mask'.format(i + 1))
+        a = np.min(x[i, ..., :3])
+        b = np.max(x[i, ..., :3])
+        i_plt[0].imshow((x[i, ..., :3] - a) / (b - a))
         i_plt[0].axis('off')
-        i_plt[1].imshow(pred[i].squeeze())
-        #cls_plt[1].set_title('Class {} Prediction'.format(i + 1))
+        i_plt[1].imshow(y_true[i].squeeze())
         i_plt[1].axis('off')
+        i_plt[2].imshow(y_pred[i].squeeze())
+        i_plt[2].axis('off')
     plt.tight_layout(pad=0.0, w_pad=0.0, h_pad=0.0)
     plt.show()
 
