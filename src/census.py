@@ -5,10 +5,13 @@ import numpy as np
 from keras.models import Model
 from keras import layers
 from keras.optimizers import Adam
+from keras import regularizers
 from keras.callbacks import ModelCheckpoint
+import pydot
+from keras.utils import plot_model
 from keras import backend as K
 from util import load_image, load_census_mask, normalize_image, create_mask, my_jaccard, \
-        save_data, load_data, plot_compare_masks
+        save_data, load_data, plot_compare_masks, blur_mask
 
 '''
 Global constants
@@ -56,22 +59,44 @@ def create_simple_cnn():
     '''
     #K.image_data_format() returns channel order from config file
     inputs = layers.Input(shape=(64, 64, 6))
-    conv11 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same')(inputs)
-    conv12 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same')(conv11)
+    conv11 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(inputs)
+    conv12 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv11)
     pool1 = layers.MaxPooling2D(pool_size=(2, 2))(conv12)
 
-    conv21 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same')(pool1)
-    conv22 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same')(conv21)
+    conv21 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(pool1)
+    conv22 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv21)
     up1 = layers.UpSampling2D(size=(2, 2))(conv22)
 
-    conv31 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same')(up1)
-    conv32 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same')(conv31)
-    #up2 = layers.UpSampling2D(size=(2, 2))(conv32)
+    conv31 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(up1)
+    conv32 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv31)
 
     final = layers.Conv2D(1, 1, strides=1, activation='linear')(conv32)
     model = Model(inputs=inputs, outputs=final)
-    model.compile(optimizer=Adam(), loss='mean_squared_logarithmic_error')
+    model.compile(optimizer=Adam(), loss='mean_squared_error')
     return model
+
+def create_simple_unet():
+    '''
+    Create a unet shaped CNN to solve the regression problem of predicting population
+    '''
+    inputs = layers.Input(shape=(64, 64, 6))
+    conv11 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(inputs)
+    conv12 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv11)
+    pool1 = layers.MaxPooling2D(pool_size=(2, 2))(conv12)
+
+    conv21 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(pool1)
+    conv22 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv21)
+    up2 = layers.UpSampling2D(size=(2, 2))(conv22)
+
+    merge3 = layers.Concatenate(axis=-1)([up2, conv12])
+    conv31 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(merge3)
+    conv32 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv31)
+
+    final = layers.Conv2D(1, 1, strides=1, activation='linear', kernel_regularizer=regularizers.l2(.01))(conv32)
+    model = Model(inputs=inputs, outputs=final)
+    model.compile(optimizer=Adam(), loss='mean_squared_error')
+    return model
+
 
 '''
 Scoring
@@ -87,8 +112,8 @@ def best_predictions(y_true, y_pred):
     '''
     Return indices sorted by best predictions
     '''
-    true_pops = np.sum(y_true * square_km_per_pixel, axis=(1, 2))
-    pred_pops = np.sum(y_pred * square_km_per_pixel, axis=(1, 2))
+    true_pops = np.log(np.sum(y_true * square_km_per_pixel, axis=(1, 2)))
+    pred_pops = np.log(np.sum(y_pred * square_km_per_pixel, axis=(1, 2)))
     return np.argsort(np.absolute(true_pops - pred_pops).squeeze())
 
 '''
@@ -98,9 +123,10 @@ def main():
     # settings
     do_training = True
     do_prediction = True
-    n_iters = 20
+    n_iters = 5
     data_set_size = 200
     ids = ['ohio_01']
+    blur_size = 15
     # if loading or saving already prepped data
     experiment_name = 'census_dev01'
     use_prepped_data = True
@@ -119,6 +145,8 @@ def main():
             # TODO: is this making the mistake of normalizing the dev and test data too early?
             images.append(normalize_image(image))
             mask = load_census_mask(i)
+            # blur mask?
+            mask = blur_mask(mask, blur_size)
             if mask.shape != image.shape:
                 h, w = image.shape[:2]
                 mask = mask[:h, :w]
@@ -151,13 +179,14 @@ def main():
     model = create_simple_cnn()
     if do_training:
         model.summary()
+        plot_model(model, to_file='model-sequential.png', show_shapes=True)
         model.fit(X, Y, batch_size=10, epochs=n_iters, verbose=2, validation_split=0.2)
     if do_prediction:
         Y_pred = model.predict(X)
         metrics = population_prediction_metrics(Y, Y_pred)
         print(metrics)
         best_indices = best_predictions(Y, Y_pred)
-        plot_compare_masks(Y[best_indices[:5]], Y_pred[best_indices[:5]])
+        plot_compare_masks(X[best_indices[:5]] ,Y[best_indices[:5]], Y_pred[best_indices[:5]])
 
 if __name__=='__main__':
     main()
