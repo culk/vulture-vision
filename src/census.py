@@ -8,7 +8,7 @@ from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint
 from keras import backend as K
 from util import load_image, load_census_mask, normalize_image, create_mask, my_jaccard, \
-        save_data, load_data
+        save_data, load_data, plot_compare_masks
 
 '''
 Global constants
@@ -136,17 +136,17 @@ def train(model):
 def main():
     # settings
     do_training = True
-    n_iters = 10
+    do_prediction = True
+    n_iters = 5
     data_set_size = 200
     ids = ['ohio_01']
     # if loading or saving already prepped data
     experiment_name = 'census_dev01'
-    use_prepped_data = False
-    save_prepped_data = True
+    use_prepped_data = True
+    save_prepped_data = False
     X_filename = '{}_X_{}.npy'.format(experiment_name, data_set_size)
     Y_filename = '{}_Y_{}.npy'.format(experiment_name, data_set_size)
     # load images and their masks
-    # TODO: save the data subset for repeated testing
     if use_prepped_data:
         X = load_data(X_filename)
         Y = load_data(Y_filename)
@@ -187,12 +187,13 @@ def main():
             save_data(Y, Y_filename)
     print(X.shape, np.min(X), np.max(X), np.mean(X), X.dtype)
     print(Y.shape, np.min(Y), np.max(Y), np.mean(Y), Y.dtype)
-    # TODO: update the model to accept the new data size and to do the train/cv
     model = create_simple_cnn()
     if do_training:
         model.summary()
-        # TODO: do validation split based on the weights
         model.fit(X, Y, batch_size=10, epochs=n_iters, verbose=2, validation_split=0.2)
+    if do_prediction:
+        Y_pred = model.predict(X[:5])
+        plot_compare_masks(Y[:5], Y_pred)
 
 if __name__=='__main__':
     main()
