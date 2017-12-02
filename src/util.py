@@ -11,7 +11,8 @@ import matplotlib.pyplot as plt
 '''
 Global constants
 '''
-data_directory = '~/Downloads/'
+# TODO: put these in a separate settings file so we don't overwrite it with each commit
+data_directory = '/media/sf_school/project/data/'
 num_class = 10
 wkt_shapes_fn = os.path.join(data_directory, 'train_wkt_v4.csv')
 grid_sizes_fn = os.path.join(data_directory, 'grid_sizes.csv')
