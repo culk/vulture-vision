@@ -46,29 +46,8 @@ def calculate_census_weights(Y):
     weights = weights / np.sum(weights)
     return weights
 
-def image_stitch(ids, img_type='M'):
-    print("\nloading {} images with ids={}".format(len(ids), ids))
-    if img_type == 'M':
-        H, W = 800, 800
-        X = np.zeros((2 * H, 2 * W, 8))
-        Y = np.zeros((2 * H, 2 * W, num_class))
-    else:
-        print('unsupported image type')
-        return 0
-
-    for i, image_id in enumerate(ids):
-        image = load_image(image_id, 'M')
-        image = normalize_image(image)
-        print(image_id, image.shape, np.amin(image), np.amax(image))
-        X[(i//2) * H:(i//2) * H + H, (i%2) * W:(i%2) * W + W] = image[:H, :W]
-        for cls in range(num_class):
-            Y[(i//2) * H:(i//2) * H + H, (i%2) * W:(i%2) * W + W, cls] = create_mask(image_id, image.shape[0], image.shape[1], [cls])[:H, :W]
-    print(np.amax(Y), np.amin(Y))
-
-    np.save(os.path.join(data_dir, 'input_{}x{}_{}.npy'.format(H*2, W*2, img_type)), X)
-    np.save(os.path.join(data_dir, 'mask_{}x{}_{}.npy'.format(H*2, W*2, num_class)), Y)
-
 # this is actually training and dev sets...
+# TODO: remove this function after implementing saving/loading of prepped data
 def gen_test_dev_sets(img_type='M'):
     sample_size = 100
     dev_size = int(sample_size * .2)
@@ -107,12 +86,14 @@ def gen_test_dev_sets(img_type='M'):
     np.save(os.path.join(data_dir, 'dev_input_{}x{}_{}'.format(H*2, W*2, img_type)), dev_X)
     np.save(os.path.join(data_dir, 'dev_mask_{}x{}_{}'.format(H*2, W*2, num_class)), dev_Y)
 
+'''
+Models
+'''
 def create_simple_cnn():
     '''
     Simple sequential CNN to solve the regression problem of predicting population
     '''
     #K.image_data_format() returns channel order from config file
-    # TODO: switch keras data format so bands are last 
     inputs = layers.Input(shape=(64, 64, 6))
     conv11 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same')(inputs)
     conv12 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same')(conv11)
@@ -131,6 +112,7 @@ def create_simple_cnn():
     model.compile(optimizer=Adam(), loss='mean_squared_logarithmic_error')
     return model
 
+# TODO: replace this function once saving and loading models/prepped data is implemented
 def train(model):
     n_iters = 2
     weights_filename_cp = '/media/sf_school/project/weights/baseline_{epoch:02d}-{val_acc:.2f}.hdf5'
@@ -149,82 +131,6 @@ def train(model):
     model.fit(train_X, train_Y, batch_size=10, epochs=n_iters, verbose=2,
               callbacks=[checkpoint], validation_data=(dev_X, dev_Y))
     model.save_weights(weights_filename)
-
-def predict(model, image_id):
-    scores = []
-    H, W = 800, 800
-    # load test image and mask
-    print("\npredicting mask for new image and calculating score")
-    image = load_image(image_id, 'M')[:H, :W]
-    image = normalize_image(image)
-    mask = np.zeros((H, W, num_class))
-    print(image_id, image.shape, np.amin(image), np.amax(image))
-    for cls in range(num_class):
-        mask[..., cls] = create_mask(image_id, image.shape[0], image.shape[1], [cls])[:H, :W]
-    print(np.amax(mask), np.amin(mask))
-
-    # use the model to predict the mask
-    images, masks = [], []
-    sub_h, sub_w = 160, 160
-    print("check sub images are correctly arrayed")
-    for i in range(5):
-        for j in range(5):
-            ys = i*sub_h
-            ye = ys + sub_h
-            xs = j*sub_w
-            xe = xs + sub_w
-            images.append(image[ys:ye, xs:xe])
-            masks.append(mask[ys:ye, xs:xe])
-    #images = np.rollaxis(np.array(images), 3, 1)
-    #masks = np.rollaxis(np.array(masks), 3, 1)
-    images = np.transpose(images, (0, 3, 1, 2))
-    masks = np.transpose(masks, (0, 3, 1, 2))
-    #mask = np.transpose(mask, (0, 1, 2))
-    predictions = model.predict(images, batch_size=4, verbose=1)
-    prediction = np.zeros_like(mask)
-    for i in range(5):
-        for j in range(5):
-            ys = i*sub_h
-            ye = ys + sub_h
-            xs = j*sub_w
-            xe = xs + sub_w
-            for cls in range(num_class):
-                prediction[ys:ye, xs:xe, cls] = predictions[i * 5 + j, cls]
-    print(predictions.shape)
-    print(masks.shape)
-
-    plt.figure()
-    # it would be cool if it printed 4 pictures
-    # true          predicted
-    # intersection  union
-    plt1 = plt.subplot(121)
-    plt1.set_title(image_id + ' building mask')
-    plt1.imshow(mask[..., 0], cmap=plt.get_cmap('gray'))
-    plt2 = plt.subplot(122)
-    plt2.set_title('building prediction')
-    plt2.imshow(np.rint(prediction[..., 0]), cmap=plt.get_cmap('gray'))
-    plt.show()
-
-
-#    scores, thresholds = [], []
-#    for cls in range(num_class):
-#        c_masks = masks[:, cls, ...]
-#        c_preds = predictions[:, cls, ...]
-#        c_masks = c_masks.reshape(-1, masks.shape[3])
-#        c_preds = c_preds.reshape(-1, masks.shape[3])
-#        score, best_threshold = 0, 0
-#        for i in range(1, 10):
-#            threshold = i / 10.0
-#            preds_b = c_preds > threshold
-#            j_index = jaccard_similarity_score(c_masks, preds_b)
-#            if j_index > score:
-#                score = j_index
-#                best_threshold = threshold
-#        print(cls, score, best_threshold)
-#        scores.append(score)
-#        thresholds.append(best_threshold)
-
-    return scores
 
 def main():
     # settings
@@ -276,6 +182,7 @@ def main():
     model = create_simple_cnn()
     if do_training:
         model.summary()
+        # TODO: do validation split based on the weights
         model.fit(X, Y, batch_size=10, epochs=n_iters, verbose=2, validation_split=0.2)
 
 if __name__=='__main__':
