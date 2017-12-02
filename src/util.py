@@ -90,6 +90,21 @@ def save_mask(mask, image_id, cls, predicted=False):
     filename = os.path.join(data_directory, folder_name, mask_name)
     imsave(filename, mask)
 
+def save_data(data, filename):
+    '''
+    Save the data to the data_dir/prepped/ folder with the given filename
+    '''
+    filename = os.path.join(data_dir, 'prepped/', filename)
+    np.save(filename, data)
+
+def load_data(filename):
+    '''
+    Load data from the data_dir/prepped/ folder with the given filename
+    '''
+    filename = os.path.join(data_dir, 'prepped/', filename)
+    data = np.load(filename)
+    return data
+
 '''
 Preprocessing
 '''
