@@ -7,7 +7,8 @@ from keras import layers
 from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint
 from keras import backend as K
-from util import load_image, load_census_mask, normalize_image, create_mask, my_jaccard
+from util import load_image, load_census_mask, normalize_image, create_mask, my_jaccard, \
+        save_data, load_data
 
 '''
 Global constants
@@ -137,19 +138,24 @@ def main():
     do_training = True
     n_iters = 10
     data_set_size = 200
-    use_prepped_data = False
     ids = ['ohio_01']
+    # if loading or saving already prepped data
+    experiment_name = 'census_dev01'
+    use_prepped_data = False
+    save_prepped_data = True
+    X_filename = '{}_X_{}.npy'.format(experiment_name, data_set_size)
+    Y_filename = '{}_Y_{}.npy'.format(experiment_name, data_set_size)
     # load images and their masks
     # TODO: save the data subset for repeated testing
     if use_prepped_data:
-        # load the prepped data
-        X = None
-        Y = None
+        X = load_data(X_filename)
+        Y = load_data(Y_filename)
     else:
         images = []
         masks = []
         for i in ids:
             image = load_image(i, 'landsat', 'all')
+            # TODO: is this making the mistake of normalizing the dev and test data too early?
             images.append(normalize_image(image))
             mask = load_census_mask(i)
             if mask.shape != image.shape:
@@ -176,8 +182,11 @@ def main():
         selection = np.random.choice(N, size=data_set_size, replace=False, p=weights)
         X = X[selection]
         Y = np.expand_dims(Y[selection], axis=-1)
-        print(X.shape, np.min(X), np.max(X), np.mean(X), X.dtype)
-        print(Y.shape, np.min(Y), np.max(Y), np.mean(Y), Y.dtype)
+        if save_prepped_data:
+            save_data(X, X_filename)
+            save_data(Y, Y_filename)
+    print(X.shape, np.min(X), np.max(X), np.mean(X), X.dtype)
+    print(Y.shape, np.min(Y), np.max(Y), np.mean(Y), Y.dtype)
     # TODO: update the model to accept the new data size and to do the train/cv
     model = create_simple_cnn()
     if do_training:

@@ -94,14 +94,14 @@ def save_data(data, filename):
     '''
     Save the data to the data_dir/prepped/ folder with the given filename
     '''
-    filename = os.path.join(data_dir, 'prepped/', filename)
+    filename = os.path.join(data_directory, 'prepped/', filename)
     np.save(filename, data)
 
 def load_data(filename):
     '''
     Load data from the data_dir/prepped/ folder with the given filename
     '''
-    filename = os.path.join(data_dir, 'prepped/', filename)
+    filename = os.path.join(data_directory, 'prepped/', filename)
     data = np.load(filename)
     return data
 
@@ -112,10 +112,8 @@ def normalize_image(image):
     '''
     Normalize the image
     '''
-    # TODO: what type of normalization should we do for the models we plan to build?
-    # color? contrast? mean-normalized? values in what range?
     normalized = np.zeros_like(image, dtype=np.float32)
-    bands = image.shape[2]
+    bands = image.shape[-1]
     for i in range(bands):
         #a = np.min(image[..., i])
         #b = np.max(image[..., i])
