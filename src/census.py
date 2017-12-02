@@ -74,13 +74,31 @@ def create_simple_cnn():
     return model
 
 '''
+Scoring
+'''
+def population_prediction_metrics(y_true, y_pred):
+    '''
+    Return useful metrics for judging population prediction accuracy
+    '''
+    assert y_true.shape == y_pred.shape
+    return (np.mean(y_true), np.mean(y_pred), np.mean(y_true)-np.mean(y_pred))
+
+def best_predictions(y_true, y_pred):
+    '''
+    Return indices sorted by best predictions
+    '''
+    true_pops = np.sum(y_true * square_km_per_pixel, axis=(1, 2))
+    pred_pops = np.sum(y_pred * square_km_per_pixel, axis=(1, 2))
+    return np.argsort(np.absolute(true_pops - pred_pops).squeeze())
+
+'''
 Main
 '''
 def main():
     # settings
     do_training = True
     do_prediction = True
-    n_iters = 5
+    n_iters = 20
     data_set_size = 200
     ids = ['ohio_01']
     # if loading or saving already prepped data
@@ -135,8 +153,11 @@ def main():
         model.summary()
         model.fit(X, Y, batch_size=10, epochs=n_iters, verbose=2, validation_split=0.2)
     if do_prediction:
-        Y_pred = model.predict(X[:5])
-        plot_compare_masks(Y[:5], Y_pred)
+        Y_pred = model.predict(X)
+        metrics = population_prediction_metrics(Y, Y_pred)
+        print(metrics)
+        best_indices = best_predictions(Y, Y_pred)
+        plot_compare_masks(Y[best_indices[:5]], Y_pred[best_indices[:5]])
 
 if __name__=='__main__':
     main()
