@@ -261,7 +261,7 @@ def plot_compare_masks(x, y_true, y_pred):
         i_plt[1].axis('off')
         i_plt[2].imshow(y_pred[i].squeeze())
         i_plt[2].axis('off')
-    plt.tight_layout(pad=0.0, w_pad=0.0, h_pad=0.0)
+    #plt.tight_layout(pad=0.0, w_pad=0.0, h_pad=0.0)
     plt.show()
 
 

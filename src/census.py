@@ -1,23 +1,17 @@
 import os
 import matplotlib.pyplot as plt
 import numpy as np
-#from sklearn.metrics import r2_score
-from keras.models import Model
-from keras import layers
-from keras.optimizers import Adam
-from keras import regularizers
-from keras.callbacks import ModelCheckpoint
-import pydot
 from keras.utils import plot_model
+from keras.callbacks import ModelCheckpoint
 from keras import backend as K
-from util import load_image, load_census_mask, normalize_image, create_mask, my_jaccard, \
-        save_data, load_data, plot_compare_masks, blur_mask
+from util import *
+from models import *
 
 '''
 Global constants
 '''
 square_km_per_pixel = 0.9
-data_dir = '/media/sf_school/project/data'
+weights_dir = '/media/sf_school/project/weights/'
 
 '''
 Preprocessing
@@ -50,52 +44,39 @@ def calculate_census_weights(Y):
     weights = weights / np.sum(weights)
     return weights
 
-'''
-Models
-'''
-def create_simple_cnn():
-    '''
-    Simple sequential CNN to solve the regression problem of predicting population
-    '''
-    #K.image_data_format() returns channel order from config file
-    inputs = layers.Input(shape=(64, 64, 6))
-    conv11 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(inputs)
-    conv12 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv11)
-    pool1 = layers.MaxPooling2D(pool_size=(2, 2))(conv12)
-
-    conv21 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(pool1)
-    conv22 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv21)
-    up1 = layers.UpSampling2D(size=(2, 2))(conv22)
-
-    conv31 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(up1)
-    conv32 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv31)
-
-    final = layers.Conv2D(1, 1, strides=1, activation='linear')(conv32)
-    model = Model(inputs=inputs, outputs=final)
-    model.compile(optimizer=Adam(), loss='mean_squared_error')
-    return model
-
-def create_simple_unet():
-    '''
-    Create a unet shaped CNN to solve the regression problem of predicting population
-    '''
-    inputs = layers.Input(shape=(64, 64, 6))
-    conv11 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(inputs)
-    conv12 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv11)
-    pool1 = layers.MaxPooling2D(pool_size=(2, 2))(conv12)
-
-    conv21 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(pool1)
-    conv22 = layers.Conv2D(64, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv21)
-    up2 = layers.UpSampling2D(size=(2, 2))(conv22)
-
-    merge3 = layers.Concatenate(axis=-1)([up2, conv12])
-    conv31 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(merge3)
-    conv32 = layers.Conv2D(32, 3, strides=1, activation='relu', padding='same', kernel_regularizer=regularizers.l2(.01))(conv31)
-
-    final = layers.Conv2D(1, 1, strides=1, activation='linear', kernel_regularizer=regularizers.l2(.01))(conv32)
-    model = Model(inputs=inputs, outputs=final)
-    model.compile(optimizer=Adam(), loss='mean_squared_error')
-    return model
+def prep_data(ids, data_set_size, blur_size):
+    images = []
+    masks = []
+    for i in ids:
+        image = load_image(i, 'landsat', 'all')
+        images.append(image)
+        mask = load_census_mask(i)
+        mask = blur_mask(mask, blur_size)
+        if mask.shape != image.shape:
+            h, w = image.shape[:2]
+            mask = mask[:h, :w]
+        masks.append(mask)
+    print(images[0].shape, np.min(images[0]), np.max(images[0]))
+    print(masks[0].shape, np.min(masks[0]), np.max(masks[0]))
+    # create X and Y composed of [#sub_images, height, width, bands]
+    X, Y = None, None
+    for image, mask in zip(images, masks):
+        sub_x, sub_y = create_sub_image_grid(image, mask, grid_size=64)
+        if X is None or Y is None:
+            X = sub_x
+            Y = sub_y
+        else:
+            X = np.concatenate((X, sub_x))
+            Y = np.concatenate((Y, sub_y))
+    print(X.shape, np.min(X), np.max(X), np.mean(X), X.dtype)
+    print(Y.shape, np.min(Y), np.max(Y), np.mean(Y), Y.dtype)
+    # calculate weights of sub_images and randomly sample them to build train/cv set
+    weights = calculate_census_weights(Y)
+    N, *_ = weights.shape
+    selection = np.random.choice(N, size=data_set_size, replace=False, p=weights)
+    X = X[selection]
+    Y = np.expand_dims(Y[selection], axis=-1)
+    return X, Y
 
 
 '''
@@ -117,77 +98,78 @@ def best_predictions(y_true, y_pred):
     return np.argsort(np.absolute(true_pops - pred_pops).squeeze())
 
 '''
-Main
+Experiment
 '''
-def main():
+def experiment(experiment_name, model, n_iters=5):
+    print(experiment_name)
     # settings
     do_training = True
     do_prediction = True
-    n_iters = 5
-    data_set_size = 200
     ids = ['ohio_01']
     blur_size = 15
+    train_set_size = 1000
+    test_set_size = 100
+    validation_split = 0.1
     # if loading or saving already prepped data
-    experiment_name = 'census_dev01'
     use_prepped_data = True
-    save_prepped_data = False
-    X_filename = '{}_X_{}.npy'.format(experiment_name, data_set_size)
-    Y_filename = '{}_Y_{}.npy'.format(experiment_name, data_set_size)
+    data_set_size = train_set_size + test_set_size
+    X_filename = 'X_{}.npy'.format(data_set_size)
+    Y_filename = 'Y_{}.npy'.format(data_set_size)
+    weights_best_filename = '{}_{}_best.hdf5'.format(experiment_name, data_set_size)
+    weights_best_filename = os.path.join(weights_dir, weights_best_filename)
+    weights_filename = '{}_{}.hdf5'.format(experiment_name, data_set_size)
+    weights_filename = os.path.join(weights_dir, weights_filename)
     # load images and their masks
     if use_prepped_data:
         X = load_data(X_filename)
         Y = load_data(Y_filename)
     else:
-        images = []
-        masks = []
-        for i in ids:
-            image = load_image(i, 'landsat', 'all')
-            # TODO: is this making the mistake of normalizing the dev and test data too early?
-            images.append(normalize_image(image))
-            mask = load_census_mask(i)
-            # blur mask?
-            mask = blur_mask(mask, blur_size)
-            if mask.shape != image.shape:
-                h, w = image.shape[:2]
-                mask = mask[:h, :w]
-            masks.append(mask)
-        print(images[0].shape, np.min(images[0]), np.max(images[0]))
-        print(masks[0].shape, np.min(masks[0]), np.max(masks[0]))
-        # create X and Y composed of [#sub_images, height, width, bands]
-        X, Y = None, None
-        for image, mask in zip(images, masks):
-            sub_x, sub_y = create_sub_image_grid(image, mask, grid_size=64)
-            if X is None or Y is None:
-                X = sub_x
-                Y = sub_y
-            else:
-                X = np.concatenate((X, sub_x))
-                Y = np.concatenate((Y, sub_y))
-        print(X.shape, np.min(X), np.max(X), np.mean(X), X.dtype)
-        print(Y.shape, np.min(Y), np.max(Y), np.mean(Y), Y.dtype)
-        # calculate weights of sub_images and randomly sample them to build train/cv set
-        weights = calculate_census_weights(Y)
-        N, *_ = weights.shape
-        selection = np.random.choice(N, size=data_set_size, replace=False, p=weights)
-        X = X[selection]
-        Y = np.expand_dims(Y[selection], axis=-1)
-        if save_prepped_data:
-            save_data(X, X_filename)
-            save_data(Y, Y_filename)
+        X, Y = prep_data(ids, data_set_size, blur_size)
+        save_data(X, X_filename)
+        save_data(Y, Y_filename)
+    # make train, dev, test and normalize
+    X_test = X[-test_set_size:]
+    Y_test = Y[-test_set_size:]
+    X = X[:train_set_size]
+    Y = Y[:train_set_size]
+    mean = np.mean(X[:-1 * int(train_set_size * validation_split)], axis=(0, 1, 2))
+    std = np.std(X[:-1 * int(train_set_size * validation_split)], axis=(0, 1, 2))
+    X = (X - mean) / std
+    X_test = (X_test - mean) / std
     print(X.shape, np.min(X), np.max(X), np.mean(X), X.dtype)
     print(Y.shape, np.min(Y), np.max(Y), np.mean(Y), Y.dtype)
-    model = create_simple_cnn()
+    print(X_test.shape, np.min(X_test), np.max(X_test), np.mean(X_test), X_test.dtype)
+    print(Y_test.shape, np.min(Y_test), np.max(Y_test), np.mean(Y_test), Y_test.dtype)
+    # load the model
+    model.summary()
+    #plot_model(model, to_file='model-sequential.png', show_shapes=True)
     if do_training:
-        model.summary()
-        plot_model(model, to_file='model-sequential.png', show_shapes=True)
-        model.fit(X, Y, batch_size=10, epochs=n_iters, verbose=2, validation_split=0.2)
+        checkpoint = ModelCheckpoint(weights_best_filename, monitor='loss', save_best_only=True)
+        model.fit(X, Y, batch_size=10, epochs=n_iters, verbose=2, validation_split=0.2,
+                callbacks=[checkpoint])
+        model.save_weights(weights_filename)
+    else:
+        # load weights
+        model.load_weights(weights_filename)
     if do_prediction:
-        Y_pred = model.predict(X)
-        metrics = population_prediction_metrics(Y, Y_pred)
+        Y_pred = model.predict(X_test)
+        metrics = population_prediction_metrics(Y_test, Y_pred)
         print(metrics)
-        best_indices = best_predictions(Y, Y_pred)
-        plot_compare_masks(X[best_indices[:5]] ,Y[best_indices[:5]], Y_pred[best_indices[:5]])
+        #best_indices = best_predictions(Y_test, Y_pred)
+        #plot_compare_masks(X_test[best_indices[:10]] ,Y[best_indices[:10]], Y_pred[best_indices[:10]])
 
 if __name__=='__main__':
-    main()
+    experiment_name = 'census_simple_cnn'
+    model = create_simple_cnn()
+    experiment(experiment_name, model, 30)
+    experiment_name = 'census_simple_unet'
+    model = create_simple_unet()
+    experiment(experiment_name, model, 30)
+    experiment_name = 'census_deep_cnn'
+    model = create_deep_cnn()
+    experiment(experiment_name, model, 30)
+    experiment_name = 'census_deep_unet'
+    model = create_deep_unet()
+    experiment(experiment_name, model, 30)
+    K.clear_session()
 
