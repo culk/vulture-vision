@@ -1,4 +1,5 @@
 import os
+import math
 import matplotlib.pyplot as plt
 import numpy as np
 #from sklearn.metrics import r2_score
@@ -49,6 +50,13 @@ def calculate_census_weights(Y):
     weights = np.sum(Y * square_km_per_pixel, axis=(1, 2))
     weights = weights / np.sum(weights)
     return weights
+
+def convert_to_bin(weights)
+    mat = weights
+    H = weights.shape
+    for i in range(H[0]):
+        mat[i] = math.ceil(math.log(2, weights[i]))
+    return mat
 
 '''
 Models
