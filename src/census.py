@@ -103,7 +103,7 @@ Experiment
 def experiment(experiment_name, model, n_iters=5):
     print(experiment_name)
     # settings
-    do_training = True
+    do_training = False
     do_prediction = True
     ids = ['ohio_01']
     blur_size = 15
@@ -142,7 +142,7 @@ def experiment(experiment_name, model, n_iters=5):
     print(Y_test.shape, np.min(Y_test), np.max(Y_test), np.mean(Y_test), Y_test.dtype)
     # load the model
     model.summary()
-    #plot_model(model, to_file='model-sequential.png', show_shapes=True)
+    plot_model(model, to_file='model-{}.png'.format(experiment_name), show_shapes=True)
     if do_training:
         checkpoint = ModelCheckpoint(weights_best_filename, monitor='loss', save_best_only=True)
         model.fit(X, Y, batch_size=10, epochs=n_iters, verbose=2, validation_split=0.2,
@@ -155,8 +155,8 @@ def experiment(experiment_name, model, n_iters=5):
         Y_pred = model.predict(X_test)
         metrics = population_prediction_metrics(Y_test, Y_pred)
         print(metrics)
-        #best_indices = best_predictions(Y_test, Y_pred)
-        #plot_compare_masks(X_test[best_indices[:10]] ,Y[best_indices[:10]], Y_pred[best_indices[:10]])
+        best_indices = best_predictions(Y_test, Y_pred)
+        plot_compare_masks(X_test[best_indices[:10]] ,Y[best_indices[:10]], Y_pred[best_indices[:10]])
 
 if __name__=='__main__':
     experiment_name = 'census_simple_cnn'
