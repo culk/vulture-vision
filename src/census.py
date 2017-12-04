@@ -1,4 +1,5 @@
 import os
+import math
 import matplotlib.pyplot as plt
 import numpy as np
 from keras.utils import plot_model
@@ -78,6 +79,12 @@ def prep_data(ids, data_set_size, blur_size):
     Y = np.expand_dims(Y[selection], axis=-1)
     return X, Y
 
+def convert_to_bin(weights)
+    mat = weights
+    H = weights.shape
+    for i in range(H[0]):
+        mat[i] = math.ceil(math.log(2, weights[i]))
+    return mat
 
 '''
 Scoring
