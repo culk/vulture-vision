@@ -7,6 +7,7 @@ from keras.callbacks import ModelCheckpoint
 from keras import backend as K
 from util import *
 from models import *
+from scipy.misc import imsave
 
 '''
 Global constants
@@ -25,8 +26,8 @@ def create_sub_image_grid(image, mask, grid_size=100):
     gh, gw = grid_size, grid_size
     images = []
     masks = []
-    for i in range(0, H - gh, gh):
-        for j in range(0, W - gw, gw):
+    for i in range(0, H - gh + 1, gh):
+        for j in range(0, W - gw + 1, gw):
             sub_image = image[i:i + gh, j:j + gw, :].reshape(1, gh, gw, bands)
             sub_mask = mask[i:i + gh, j:j + gw].reshape(1, gh, gw)
             images.append(sub_image)
@@ -78,13 +79,6 @@ def prep_data(ids, data_set_size, blur_size):
     X = X[selection]
     Y = np.expand_dims(Y[selection], axis=-1)
     return X, Y
-
-def convert_to_bin(weights)
-    mat = weights
-    H = weights.shape
-    for i in range(H[0]):
-        mat[i] = math.ceil(math.log(2, weights[i]))
-    return mat
 
 '''
 Scoring
@@ -165,7 +159,56 @@ def experiment(experiment_name, model, n_iters=5):
         best_indices = best_predictions(Y_test, Y_pred)
         plot_compare_masks(X_test[best_indices[:10]] ,Y[best_indices[:10]], Y_pred[best_indices[:10]])
 
+def save_examples(y=0, x=0, height=512, width=512):
+    '''
+    height and width must be evenly divisible by the grid_size the NN was trained on (64)
+    '''
+    # load image
+    image_id = 'ohio_01'
+    blur_size = 15
+    gs = 64 # grid_size = 64
+    weights_filename = os.path.join(weights_dir, 'census_deep_unet_1100_best.hdf5')
+    image = load_image(image_id, 'landsat', 'all')
+    image = image[y:y+height, x:x+width]
+    # scale and save image
+    smallest = np.min(image[..., :3])
+    display_image = image - smallest
+    scale = np.max(display_image) / 255
+    display_image = display_image / (scale + 1) / 2
+    display_image = display_image.astype(int)
+    print(image[..., 0].min(), image[..., 0].max(), image[..., 0].mean())
+    print(image[..., 1].min(), image[..., 1].max(), image[..., 1].mean())
+    print(image[..., 2].min(), image[..., 2].max(), image[..., 2].mean())
+    imsave('image.png', display_image[..., :3])
+    image = normalize_image(image)
+    mask = load_census_mask(image_id)
+    mask = blur_mask(mask, blur_size)
+    if mask.shape != image.shape:
+        h, w = image.shape[:2]
+        mask = mask[y:y+height, x:x+width]
+    # save mask
+    imsave('mask.png', mask)
+    # make the data from the image
+    X, Y = create_sub_image_grid(image, mask, grid_size=64)
+    # use all the data and do predictions
+    model = create_deep_unet()
+    model.load_weights(weights_filename)
+    Y_pred = model.predict(X)
+    Y_pred = Y_pred.squeeze()
+    print(Y_pred.shape)
+    # score things?
+    # stich and save prediction
+    prediction = np.zeros((height, width))
+    for i, h in enumerate(range(0, height - gs + 1, gs)):
+        for j, w in enumerate(range(0, width - gs + 1, gs)):
+            prediction[h:h+gs, w:w+gs] = Y_pred[(i * width // gs) + j]
+    # save prediction
+    imsave('prediction.png', prediction)
+    
+
 if __name__=='__main__':
+    save_examples(3600, 1000, 1024, 1024)
+    '''
     experiment_name = 'census_simple_cnn'
     model = create_simple_cnn()
     experiment(experiment_name, model, 30)
@@ -178,5 +221,6 @@ if __name__=='__main__':
     experiment_name = 'census_deep_unet'
     model = create_deep_unet()
     experiment(experiment_name, model, 30)
+    '''
     K.clear_session()
 
