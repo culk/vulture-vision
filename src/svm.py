@@ -10,8 +10,14 @@ from sklearn.externals import joblib
 from itertools import combinations
 import util
 
-# TODO: which filters to use?
-#cv2.getGaborKernel(ksize, sigma, theta, lambd, gamma[, psi[, ktype]])
+# TODO:
+# - expand to all bands
+# - add regularization
+# - improve models, move to other file
+# - fix the way that images are noremalized
+# - fix the way train/cv/test sets are created
+# - make pretty image showing output/input
+
 model_dir = '/media/sf_school/project/models/'
 results_dir = '/media/sf_school/project/results/'
 data_dir = '/media/sf_school/project/data/'
@@ -109,13 +115,15 @@ def save_results(results):
 '''
 Features
 '''
+#cv2.getGaborKernel(ksize, sigma, theta, lambd, gamma[, psi[, ktype]])
+
 def get_laplacian(image, size=3):
     if len(image.shape) == 2:
         H, W = image.shape
         image = image.reshape(H, W, 1)
     features = np.zeros_like(image)
     for i in range(image.shape[2]):
-        features[..., i] = cv2.Laplacian(image[..., i], ddepth=6, ksize=size)
+        features[..., i] = cv2.Laplacian(image[..., i], ddepth=5, ksize=size)
     return features
 
 def get_gaussian(image, size=3):
@@ -163,7 +171,7 @@ def experiment(X, Y,
     # data is list of subimages, each 100x100
     # labels are corresponding bit masks
     # create tuple of feature combinations to test
-    feature_combinations = [None, (features[0],), (features[1],), features]
+    feature_combinations = [None] #[None, (features[0],), (features[1],), features]
     for size in sizes:
         results = dict()
         # randomly order subimages
@@ -224,9 +232,12 @@ def experiment(X, Y,
                                                                 test_score))
                 results[(model_name, feature_combo, size, 'train')] = train_score
                 results[(model_name, feature_combo, size, 'test')] = test_score
-                if size > 50 and feature_combo is not None and len(feature_combo) == 2:
-                    save_model(model, model_name, size)
-        save_results(results)
+                #if size > 50 and feature_combo is not None and len(feature_combo) == 2:
+                    #save_model(model, model_name, size)
+                print(train_samples.shape, train_labels.shape, train_prediction.shape)
+                util.plot_compare_masks(train_samples, train_labels, train_prediction)
+        print(results)
+        #save_results(results)
 
 def baseline():
     '''
@@ -298,11 +309,11 @@ def make_proposal_graphic():
     D = image.shape[-1]
     samples = image.reshape(-1, D)
     labels = mask.reshape(-1)
-    model = load_model('logistic_10_20171115-1218.pkl')
+    model = load_model('svm_100_20171115-1239.pkl')
     prediction = model.predict(samples)
     true = [labels.reshape(H, W)]
     predictions = [prediction.reshape(H, W)]
-    util.plot_compare_masks(true, predictions)
+    util.plot_compare_masks(np.expand_dims(image, axis=0), [mask], predictions)
 
 def main():
     '''
@@ -312,22 +323,22 @@ def main():
             for z in range(0, 5):
                 i = '{}_{}_{}'.format(x, y, z)
                 image_ids.insert(random.randint(0, len(image_ids)), i)
-    #image_ids = ['6100_2_3']
     '''
     image_ids = ['6100_2_3', '6120_2_2', '6120_2_0', '6100_1_3',
                  '6110_4_0', '6140_3_1', '6110_1_2', '6140_1_2',
                  '6110_3_1', '6060_2_3', '6070_2_3', '6100_2_2']
+    #image_ids = ['6100_2_3']
     image_type = 'M'
-    models = ('svm', 'logistic')
-    sizes = [10, 25, 50, 100, 200, 300]
-    features = (get_laplacian, get_gaussian)
+    models = ['svm']
+    sizes = [100]
+    features = None #(get_laplacian, get_gaussian)
     prepared_data = False
     # import data
     if not prepared_data:
         print('Preparing Data')
         data, labels = prep_data(image_ids, max(sizes), image_type)
-        save_data(data)
-        save_data(labels, True)
+        #save_data(data)
+        #save_data(labels, True)
     else:
         data = load_data()
         labels = load_data(labels=True)
@@ -336,5 +347,6 @@ def main():
     #save_results(results)
 
 if __name__ == '__main__':
+    #main()
     make_proposal_graphic()
 

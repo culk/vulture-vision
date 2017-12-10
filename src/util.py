@@ -182,8 +182,8 @@ def generate_mask_from_coords(height, width, exteriors, interiors):
     Creates a numpy array bitmask from the specified coordinates
     '''
     mask = np.zeros((height, width), np.uint8)
-    fillPoly(mask, exteriors, 1)
-    fillPoly(mask, interiors, 0)
+    cv2.fillPoly(mask, exteriors, 1)
+    cv2.fillPoly(mask, interiors, 0)
     return mask
 
 def blur_mask(image, size=5):
