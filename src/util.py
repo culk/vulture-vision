@@ -167,9 +167,8 @@ def convert_shape_to_coords(shape, height, width, xmax, ymin):
     Returns a list of scalled interior and exterior coordinates from a given shape
     '''
     def scale_coords(coords):
-        #TODO: Scale image with equations from kaggle description
-        scale_y = height / ymin
-        scale_x = width / xmax
+        scale_y = (height**2 / (height + 1)) / ymin
+        scale_x = (width**2 / (width + 1)) / xmax
         scale = np.array([scale_x, scale_y])
         coords *= scale
         coords = np.round(coords).astype(np.int)
@@ -197,13 +196,6 @@ def generate_mask_from_coords(height, width, exteriors, interiors):
     cv2.fillPoly(mask, interiors, 0)
     return mask
 
-def blur_mask(image, size=5):
-    kernel_shape = (size, size)
-    print(np.sum(image))
-    blurred = cv2.GaussianBlur(image, kernel_shape, 0)
-    print(np.sum(blurred))
-    return blurred
-
 def create_mask(image_id, height, width, classes='all'):
     '''
     Load the masks for an image
@@ -221,8 +213,17 @@ def create_mask(image_id, height, width, classes='all'):
     for c, shape in enumerate(shapes):
         coords = convert_shape_to_coords(shape, height, width, xmax, ymin)
         # TODO: does this actually work?
-        mask[generate_mask_from_coords(height, width, coords[0], coords[1])] = c
+        c_mask = generate_mask_from_coords(height, width, coords[0], coords[1])
+        assert mask.shape == c_mask.shape
+        mask[c_mask == 1] = c + 1
     return mask
+
+def blur_mask(image, size=5):
+    kernel_shape = (size, size)
+    print(np.sum(image))
+    blurred = cv2.GaussianBlur(image, kernel_shape, 0)
+    print(np.sum(blurred))
+    return blurred
 
 '''
 Scoring functions
@@ -232,11 +233,11 @@ def my_jaccard(true, pred):
     Calculate the union over intersection of the true and predicted mask
     true, pred = binary masks of the same size representing the actual and predicted mask
     '''
-    true = true.flatten()
-    pred = np.rint(pred.flatten()).astype(np.uint8)
+    #true = true.flatten()
+    #pred = np.rint(pred.flatten()).astype(np.uint8)
     assert true.shape == pred.shape
-    true[true > 1] = 1
-    pred[pred > 1] = 1
+    #true[true > 1] = 1
+    #pred[pred > 1] = 1
     intersection = np.sum(true * pred)
     union = true + pred
     union[union > 1] = 1

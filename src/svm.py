@@ -46,7 +46,7 @@ def prep_data(ids, data_set_size, kernel_size):
     images = []
     masks = []
     image_type = 'M'
-    classes = 'all'
+    classes = [0, 1, 2, 3, 4, 5, 6, 7]
     for i in ids:
         image = load_image(i, image_type)
         # add features (right features and kernel_size?)
@@ -134,6 +134,35 @@ def create_svm_model():
     TODO: attempt class_weight='balanced' at some point
     '''
     return svm.LinearSVC(penalty='l2', dual=False, C=1.0, class_weight='balanced')
+
+def create_logistic_model():
+    '''
+    dual=False if #samples > #features
+    C=1.0 is default penalty for errors
+    default for multi-class is one vs all
+    TODO: attempt class_weight='balanced' at some point
+    '''
+    return linear_model.LogisticRegression(penalty='l2', dual=False, C=1.0, class_weight='balanced')
+
+'''
+Metrics
+'''
+def compare_class_scores(true, pred):
+    classes = np.max(true)
+    for i in range(classes + 1):
+        t = np.sum(true == i)
+        p = np.sum(pred == i)
+        union = np.sum(np.logical_and(true == pred, true == i))
+        intersection = np.sum(np.logical_or(true == i, pred == i))
+        if t != 0:
+            a = union / t
+        else:
+            a = 0.0
+        if i != 0 and intersection != 0:
+            j = union / intersection
+        else:
+            j = 0.0
+        print("Class: {},\t True: {},\t Pred: {},\t Acc: {},\t Jac: {}".format(i, t, p, a, j))
 
 '''
 Experiments
@@ -237,19 +266,22 @@ def old_experiment(X, Y,
         print(results)
         #save_results(results)
 
-def experiment(experiment_name, model_name):
+def experiment(experiment_name, model_name, size, cv):
     print(experiment_name, model_name)
     # settings
     do_training = True
     do_prediction = True
-    ids = ['6100_2_3']
+    ids = ['6100_2_3', '6090_2_0', '6100_2_2', '6120_2_2',
+           '6120_2_0', '6150_2_3', '6070_2_3', '6100_1_3',
+           '6010_4_2', '6110_4_0', '6140_3_1', '6110_1_2',
+           '6140_1_2', '6110_3_1', '6170_2_4', '6060_2_3']
     kernel_size = 15
-    train_set_size = 100 #add more images to get more size
+    train_set_size = size
     test_set_size = 0
-    validation_split = 0.2
+    validation_split = cv
     train_stop = int(train_set_size * (1 - validation_split))
     # if loading or saving already prepped data
-    use_prepped_data = True
+    use_prepped_data = False
     data_set_size = train_set_size + test_set_size
     X_filename = 'feature_X_{}.npy'.format(data_set_size)
     Y_filename = 'feature_Y_{}.npy'.format(data_set_size)
@@ -280,6 +312,8 @@ def experiment(experiment_name, model_name):
     if do_training:
         if model_name == 'svm':
             model = create_svm_model()
+        elif model_name == 'logistic':
+            model = create_logistic_model()
         print(X[:train_stop].reshape(-1, features).shape)
         print(Y[:train_stop].flatten().shape)
         model.fit(X[:train_stop].reshape(-1, features),
@@ -291,15 +325,7 @@ def experiment(experiment_name, model_name):
         X_test = X[train_stop:]
         Y_test = Y[train_stop:]
         Y_pred = model.predict(X_test.reshape(-1, features))
-        accuracy = model.score(X_test.reshape(-1, features),
-                               Y_test.flatten())
-        # TODO: implement my own accuracy?
-        #accuracy = my_accuracy(Y[train_stop:], Y_pred)
-        #jaccard = my_jaccard(Y[train_stop:], Y_pred)
-        print(np.min(Y_pred), np.max(Y_pred), np.mean(Y_pred))
-        print(np.min(Y_test.flatten()), np.max(Y_test.flatten()), np.mean(Y_test.flatten()))
-        print(np.sum(Y_pred == Y_test.flatten()))
-        print(accuracy)
+        compare_class_scores(Y_test.flatten(), Y_pred)
         # TODO: fix this function to visualize
         #plot_compare_masks(X[train_stop:], Y[train_stop:], Y_pred)
 
@@ -310,7 +336,7 @@ def baseline():
     # import image
     H, W = 200, 200
     add_features = True
-    image_id = '6100_2_3'
+    image_id = '6120_2_2' #'6100_2_3'
     image = load_image(image_id, 'M')
     image = normalize_image(image)
     train_image = image[:H, :W, :]
@@ -411,7 +437,28 @@ def main():
     #save_results(results)
 
 if __name__ == '__main__':
-    experiment_name = 'feature_dev01'
+    cv = .2
+    experiment_name = 'small_01'
+    model_name = 'logistic'
+    size = 500
+    experiment(experiment_name, model_name, size, cv)
+    experiment_name = 'small_01'
     model_name = 'svm'
-    experiment(experiment_name, model_name)
+    size = 500
+    experiment(experiment_name, model_name, size, cv)
+    experiment_name = 'medium_01'
+    model_name = 'logistic'
+    size = 1000
+    experiment(experiment_name, model_name, size, cv)
+    experiment_name = 'medium_01'
+    model_name = 'svm'
+    size = 1000
+    experiment(experiment_name, model_name, size, cv)
+    experiment_name = 'large_01'
+    model_name = 'logistic'
+    size = 2000
+    experiment(experiment_name, model_name, size, cv)
+    experiment_name = 'large_01'
+    model_name = 'svm'
+    size = 2000
 
