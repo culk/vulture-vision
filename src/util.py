@@ -7,6 +7,7 @@ from shapely.geometry import MultiPolygon, Polygon
 import cv2
 from datetime import datetime
 from scipy.misc import imsave
+from sklearn.externals import joblib
 import matplotlib.pyplot as plt
 
 '''
@@ -14,6 +15,7 @@ Global constants
 '''
 # TODO: put these in a separate settings file so we don't overwrite it with each commit
 data_directory = '/media/sf_school/project/data/'
+model_dir = '/media/sf_school/project/models/'
 num_class = 10
 wkt_shapes_fn = os.path.join(data_directory, 'train_wkt_v4.csv')
 grid_sizes_fn = os.path.join(data_directory, 'grid_sizes.csv')
@@ -50,7 +52,7 @@ def load_image(image_id, image_type=None, bands='all'):
     image = np.rollaxis(image, 0, 3)
     if bands != 'all':
         bands = np.array(bands)
-        image = image[..., bands]
+        image = image[..., np.arrange(num_class) == bands]
     return image
 
 def load_landsat_image(image_id, bands):
@@ -105,13 +107,22 @@ def load_data(filename):
     data = np.load(filename)
     return data
 
+def save_model(model, filename):
+    print('Saving model to disk: {}'.format(os.path.join(model_dir, filename)))
+    joblib.dump(model, os.path.join(model_dir, filename))
+
+def load_model(filename=None):
+    model = joblib.load(os.path.join(model_dir, filename))
+    return model
+
 '''
 Preprocessing
 '''
 def normalize_image(image):
     '''
-    Normalize the image
+    Normalize the image using mean and standard deviation
     '''
+    # TODO: save the mean/std values for future normalization
     normalized = np.zeros_like(image, dtype=np.float32)
     bands = image.shape[-1]
     for i in range(bands):
@@ -200,20 +211,18 @@ def create_mask(image_id, height, width, classes='all'):
     classes:
         -all = load all classes
         -list of the classes to load, zero-indexed (i.e. [0, 3, 5])
-    Returns a numpy array of masks with dimensions [height, width, classes]
+    Returns a numpy array of the mask where the value is the class
     '''
     # Based on functions by author: visoft
     # Link: https://www.kaggle.com/visoft/dstl-satellite-imagery-feature-detection/export-pixel-wise-mask
-    masks = []
+    mask = np.zeros((height, width), dtype=np.uint8)
     xmax, ymin = load_grid_sizes(image_id)
     shapes = load_wkt_shape(image_id, classes)
-    for shape in shapes:
+    for c, shape in enumerate(shapes):
         coords = convert_shape_to_coords(shape, height, width, xmax, ymin)
-        masks.append(generate_mask_from_coords(height, width, coords[0], coords[1]))
-    masks = np.rollaxis(np.array(masks), 0, 3)
-    # remove extra dimensions if only one class was requested
-    masks = np.squeeze(masks)
-    return masks
+        # TODO: does this actually work?
+        mask[generate_mask_from_coords(height, width, coords[0], coords[1])] = c
+    return mask
 
 '''
 Scoring functions
@@ -239,10 +248,38 @@ def my_jaccard(true, pred):
         score = 0.0
     return score
 
+def my_accuracy(true, pred):
+    '''
+    Calculate classification accuracy
+    '''
+    return None
+
 '''
 Visualizations
 '''
-def plot_compare_masks(x, y_true, y_pred):
+def plot_compare_census(x, y_true, y_pred):
+    '''
+    Plot the true and predicted population density side by side for comparison
+    true, pred: lists of masks that represent the true and predicted population
+    '''
+    # TODO: consider using matplotlib.gridspec to fix plot spacing
+    assert len(y_true) == len(y_pred) and len(x) == len(y_true)
+    fig, plts = plt.subplots(len(x), 3)
+    if len(y_true) == 1:
+        plts = [plts]
+    for i, i_plt in enumerate(plts):
+        a = np.min(x[i, ..., :3])
+        b = np.max(x[i, ..., :3])
+        i_plt[0].imshow((x[i, ..., :3] - a) / (b - a))
+        i_plt[0].axis('off')
+        i_plt[1].imshow(y_true[i].squeeze())
+        i_plt[1].axis('off')
+        i_plt[2].imshow(y_pred[i].squeeze())
+        i_plt[2].axis('off')
+    #plt.tight_layout(pad=0.0, w_pad=0.0, h_pad=0.0)
+    plt.show()
+
+def plot_compare_census(x, y_true, y_pred):
     '''
     Plot the true and predicted masks side by side for comparison
     true, pred: lists of masks that represent the true and predicted labels
@@ -263,7 +300,6 @@ def plot_compare_masks(x, y_true, y_pred):
         i_plt[2].axis('off')
     #plt.tight_layout(pad=0.0, w_pad=0.0, h_pad=0.0)
     plt.show()
-
 
 def plot_image(image):
     '''

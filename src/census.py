@@ -157,7 +157,7 @@ def experiment(experiment_name, model, n_iters=5):
         metrics = population_prediction_metrics(Y_test, Y_pred)
         print(metrics)
         best_indices = best_predictions(Y_test, Y_pred)
-        plot_compare_masks(X_test[best_indices[:10]] ,Y[best_indices[:10]], Y_pred[best_indices[:10]])
+        plot_compare_census(X_test[best_indices[:10]] ,Y[best_indices[:10]], Y_pred[best_indices[:10]])
 
 def save_examples(y=0, x=0, height=512, width=512):
     '''

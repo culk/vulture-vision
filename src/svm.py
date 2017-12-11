@@ -6,9 +6,8 @@ from datetime import datetime
 import csv
 import random
 from sklearn import svm, linear_model
-from sklearn.externals import joblib
 from itertools import combinations
-import util
+from util import *
 
 # TODO:
 # - expand to all bands
@@ -23,77 +22,60 @@ results_dir = '/media/sf_school/project/results/'
 data_dir = '/media/sf_school/project/data/'
 
 '''
-File I/O
+Preprocessing
 '''
-def save_model(model, name, size):
-    dt = datetime.now().strftime('%Y%m%d-%H%M')
-    model_filename = '{}_{}_{}.pkl'.format(name, size, dt)
-    print('Saving model to disk: {}'.format(os.path.join(model_dir, model_filename)))
-    joblib.dump(model, os.path.join(model_dir, model_filename))
+def create_sub_image_grid(image, mask, grid_size=100):
+    '''
+    Split an image into sub images based on grid_size
+    '''
+    H, W, features = image.shape
+    gh, gw = grid_size, grid_size
+    images = []
+    masks = []
+    for i in range(0, H - gh + 1, gh):
+        for j in range(0, W - gw + 1, gw):
+            sub_image = image[i:i + gh, j:j + gw, :].reshape(1, gh, gw, features)
+            sub_mask = mask[i:i + gh, j:j + gw].reshape(1, gh, gw)
+            images.append(sub_image)
+            masks.append(sub_mask)
+    images = np.concatenate(images)
+    masks = np.concatenate(masks)
+    return images, masks
 
-def load_model(filename=None):
-    # load most recent model
-    if filename is None:
-        filename = os.listdir(model_dir)[-1]
-    model = joblib.load(os.path.join(model_dir, filename))
-    return model
-
-def save_data(data, labels=False):
-    # save prepped data
-    # TODO: compressed using np.savez?
-    if labels:
-        desc = 'labels'
-    else:
-        desc = 'samples'
-    dt = datetime.now().strftime('%Y%m%d-%H%M')
-    data_filename = '{}_{}_{}.npy'.format(desc, data.shape[0], dt)
-    np.save(os.path.join(data_dir, 'prepped', data_filename), data)
-
-def prep_data(ids, size, image_type, height=100, width=100, classes=[0]):
-    samples = []
-    labels = []
-    n = 0
-    threshold = 5
-    while len(samples) < size:
-        # import next image
-        if n >= len(ids):
-            print(len(samples))
-            raise Exception('Not enough images to generate size of data')
-        try:
-            image = util.load_image(ids[n], image_type)
-            image = util.normalize_image(image)
-            H, W, _ = image.shape
-            mask = util.create_mask(ids[n], H, W, classes)
-        except:
-            n += 1
-            continue
-        # add all height x width subregions of the image and mask
-        for i in range(H//height):
-            for j in range(W//width):
-                i_start = i * height
-                i_stop = i_start + height
-                j_start = j * width
-                j_stop = j_start + width
-                if np.sum(mask[i_start:i_stop, j_start:j_stop]) < threshold:
-                    continue
-                samples.append(image[i_start:i_stop, j_start:j_stop])
-                labels.append(mask[i_start:i_stop, j_start:j_stop])
-        n += 1
-    # convert into list of 100x100 subimages
-    samples = np.asarray(samples[:size])
-    labels = np.asarray(labels[:size])
-    return samples, labels
-
-def load_data(labels=False):
-    # load most recently prepped data
-    if labels:
-        desc = 'labels'
-    else:
-        desc = 'samples'
-    filenames = os.listdir(os.path.join(data_dir, 'prepped'))
-    filename = list(filter(lambda s: desc in s, filenames))[-1]
-    data = np.load(os.path.join(data_dir, 'prepped', filename))
-    return data
+def prep_data(ids, data_set_size, kernel_size):
+    images = []
+    masks = []
+    image_type = 'M'
+    classes = 'all'
+    for i in ids:
+        image = load_image(i, image_type)
+        # add features (right features and kernel_size?)
+        image = np.dstack((image,
+                           get_laplacian(image, kernel_size),
+                           get_gaussian(image, kernel_size)))
+        images.append(image)
+        H, W, _ = image.shape
+        mask = create_mask(i, H, W, classes)
+        masks.append(mask)
+    # create X and Y composed of [#sub_images, height, width, features/classes]
+    X, Y = None, None
+    for image, mask in zip(images, masks):
+        sub_x, sub_y = create_sub_image_grid(image, mask, grid_size=64)
+        if X is None or Y is None:
+            X = sub_x
+            Y = sub_y
+        else:
+            X = np.concatenate((X, sub_x))
+            Y = np.concatenate((Y, sub_y))
+    # don't normalize yet
+    print(X.shape, np.min(X), np.max(X), np.mean(X), np.std(X), X.dtype)
+    print(Y.shape, Y.dtype)
+    # TODO: weight the sub_images?
+    N, *_ = Y.shape
+    selection = np.random.choice(N, size=data_set_size, replace=False)
+    X = X[selection]
+    Y = Y[selection]
+    return X, Y
 
 def save_results(results):
     '''
@@ -118,16 +100,21 @@ Features
 #cv2.getGaborKernel(ksize, sigma, theta, lambd, gamma[, psi[, ktype]])
 
 def get_laplacian(image, size=3):
+    # check if grayscale (only 1 band)
     if len(image.shape) == 2:
         H, W = image.shape
         image = image.reshape(H, W, 1)
+        bands = 1
+    else:
+        bands = image.shape[-1]
     features = np.zeros_like(image)
-    for i in range(image.shape[2]):
-        features[..., i] = cv2.Laplacian(image[..., i], ddepth=5, ksize=size)
+    for i in range(bands):
+        features[..., i] = cv2.Laplacian(image[..., i], ddepth=5, ksize=size) #5?
     return features
 
 def get_gaussian(image, size=3):
     kernel_shape = (size, size)
+    # check if grayscale (only 1 band)
     if len(image.shape) == 2:
         H, W = image.shape
         image = image.reshape(H, W, 1)
@@ -135,6 +122,18 @@ def get_gaussian(image, size=3):
     for i in range(image.shape[2]):
         features[..., i] = cv2.GaussianBlur(image[..., i], kernel_shape, 0)
     return features
+
+'''
+Models
+'''
+def create_svm_model():
+    '''
+    dual=False if #samples > #features
+    C=1.0 is default penalty for errors
+    default for multi-class is one vs all
+    TODO: attempt class_weight='balanced' at some point
+    '''
+    return svm.LinearSVC(penalty='l2', dual=False, C=1.0, class_weight='balanced')
 
 '''
 Experiments
@@ -157,7 +156,7 @@ def create_cv(X, Y, k):
         Y_train[i] = Y[np.arange(k) != i].reshape(train_size, H, W)
         Y_validate[i] = Y[i]
 
-def experiment(X, Y,
+def old_experiment(X, Y,
                models=('svm',),
                sizes=[10],
                #sizes=[10, 25, 50, 100, 200, 500, 1000], #have 1600 in total right now
@@ -179,7 +178,6 @@ def experiment(X, Y,
         X = X[order]
         Y = Y[order]
         print('##### Size: {} #####'.format(size))
-        # TODO: rotate/flip some samples
         # select first size subimages
         samples = X[:size]
         labels = Y[:size].reshape(-1)
@@ -224,10 +222,10 @@ def experiment(X, Y,
                 # TODO: cross-validate training
                 # predict mask and calculate scores
                 train_prediction = model.predict(train_samples)
-                train_score = util.my_jaccard(train_labels, train_prediction)
+                train_score = my_jaccard(train_labels, train_prediction)
                 test_prediction = model.predict(test_samples)
                 # TODO: score breaks when the mask has zero of the class
-                test_score = util.my_jaccard(test_labels, test_prediction)
+                test_score = my_jaccard(test_labels, test_prediction)
                 print('Model: {}\t Train: {}\t Test: {}'.format(model_name, train_score,
                                                                 test_score))
                 results[(model_name, feature_combo, size, 'train')] = train_score
@@ -235,9 +233,75 @@ def experiment(X, Y,
                 #if size > 50 and feature_combo is not None and len(feature_combo) == 2:
                     #save_model(model, model_name, size)
                 print(train_samples.shape, train_labels.shape, train_prediction.shape)
-                util.plot_compare_masks(train_samples, train_labels, train_prediction)
+                plot_compare_masks(train_samples, train_labels, train_prediction)
         print(results)
         #save_results(results)
+
+def experiment(experiment_name, model_name):
+    print(experiment_name, model_name)
+    # settings
+    do_training = True
+    do_prediction = True
+    ids = ['6100_2_3']
+    kernel_size = 15
+    train_set_size = 100 #add more images to get more size
+    test_set_size = 0
+    validation_split = 0.2
+    train_stop = int(train_set_size * (1 - validation_split))
+    # if loading or saving already prepped data
+    use_prepped_data = True
+    data_set_size = train_set_size + test_set_size
+    X_filename = 'feature_X_{}.npy'.format(data_set_size)
+    Y_filename = 'feature_Y_{}.npy'.format(data_set_size)
+    model_filename = 'feature_{}_{}.pkl'.format(model_name, data_set_size)
+    # load images and their masks
+    if use_prepped_data:
+        X = load_data(X_filename)
+        Y = load_data(Y_filename)
+    else:
+        X, Y = prep_data(ids, data_set_size, kernel_size)
+        save_data(X, X_filename)
+        save_data(Y, Y_filename)
+    # make train, dev, test and normalize
+    #X_test = X[-test_set_size:]
+    #Y_test = Y[-test_set_size:]
+    #X = X[:train_set_size]
+    #Y = Y[:train_set_size]
+    mean = np.mean(X[:train_stop], axis=(0, 1, 2))
+    std = np.std(X[:train_stop], axis=(0, 1, 2))
+    X = (X - mean) / std
+    *_, features = X.shape
+    #X_test = (X_test - mean) / std
+    print(X.shape, np.min(X), np.max(X), np.mean(X), np.std(X), X.dtype)
+    print(Y.shape, Y.dtype)
+    #print(X_test.shape, np.min(X_test), np.max(X_test), np.mean(X_test), X_test.dtype)
+    #print(Y_test.shape, np.min(Y_test), np.max(Y_test), np.mean(Y_test), Y_test.dtype)
+    # load the model
+    if do_training:
+        if model_name == 'svm':
+            model = create_svm_model()
+        print(X[:train_stop].reshape(-1, features).shape)
+        print(Y[:train_stop].flatten().shape)
+        model.fit(X[:train_stop].reshape(-1, features),
+                  Y[:train_stop].flatten())
+        save_model(model, model_filename)
+    else:
+        model = load_model(model_filename)
+    if do_prediction:
+        X_test = X[train_stop:]
+        Y_test = Y[train_stop:]
+        Y_pred = model.predict(X_test.reshape(-1, features))
+        accuracy = model.score(X_test.reshape(-1, features),
+                               Y_test.flatten())
+        # TODO: implement my own accuracy?
+        #accuracy = my_accuracy(Y[train_stop:], Y_pred)
+        #jaccard = my_jaccard(Y[train_stop:], Y_pred)
+        print(np.min(Y_pred), np.max(Y_pred), np.mean(Y_pred))
+        print(np.min(Y_test.flatten()), np.max(Y_test.flatten()), np.mean(Y_test.flatten()))
+        print(np.sum(Y_pred == Y_test.flatten()))
+        print(accuracy)
+        # TODO: fix this function to visualize
+        #plot_compare_masks(X[train_stop:], Y[train_stop:], Y_pred)
 
 def baseline():
     '''
@@ -247,15 +311,15 @@ def baseline():
     H, W = 200, 200
     add_features = True
     image_id = '6100_2_3'
-    image = util.load_image(image_id, 'M')
-    image = util.normalize_image(image)
+    image = load_image(image_id, 'M')
+    image = normalize_image(image)
     train_image = image[:H, :W, :]
     test_image = image[:H, W:W * 2, :]
     print('Image loaded with dimensions: {}'.format(image.shape))
     print('\tWill train on portion of shape: {}'.format(train_image.shape))
     print('\tWill test on portion of shape: {}'.format(test_image.shape))
     # import mask for buildings
-    mask = util.create_mask(image_id, *image.shape[:2], classes=[0])
+    mask = create_mask(image_id, *image.shape[:2], classes=[0])
     train_mask = mask[:H, :W]
     test_mask = mask[:H, W:W * 2]
     print('Mask loaded with dimensions: {}'.format(mask.shape))
@@ -266,7 +330,7 @@ def baseline():
         train_features = np.dstack((get_laplacian(train_image, 5), get_gaussian(train_image, 5)))
         #a = [train_image[..., i] for i in range(train_image.shape[2])]
         #b = [features[..., i] for i in range(features.shape[2])]
-        #util.plot_compare_masks(a, b)
+        #plot_compare_masks(a, b)
         train_image = np.dstack((train_image, train_features))
         test_features = np.dstack((get_laplacian(test_image, 5), get_gaussian(test_image, 5)))
         test_image = np.dstack((test_image, test_features))
@@ -291,19 +355,19 @@ def baseline():
         predictions.append(pred_y.reshape(H, W))
     # calculate score
     for p, t in zip(predictions, true):
-        score = util.my_jaccard(t, p)
+        score = my_jaccard(t, p)
         print('Score: {}'.format(score))
     # plot predictions
     print('Ploting predictions')
-    util.plot_compare_masks(true, predictions)
+    plot_compare_masks(true, predictions)
 
 def make_proposal_graphic():
     image_id = '6100_2_3'
     image_type = 'M'
-    image = util.load_image(image_id, 'M')
-    image = util.normalize_image(image)
+    image = load_image(image_id, 'M')
+    image = normalize_image(image)
     H, W, _ = image.shape
-    mask = util.create_mask(image_id, H, W, classes=[0])
+    mask = create_mask(image_id, H, W, classes=[0])
     features = np.dstack((get_laplacian(image, 3), get_gaussian(image, 3)))
     image = np.dstack((image, features)).reshape(H, W, -1)
     D = image.shape[-1]
@@ -313,7 +377,7 @@ def make_proposal_graphic():
     prediction = model.predict(samples)
     true = [labels.reshape(H, W)]
     predictions = [prediction.reshape(H, W)]
-    util.plot_compare_masks(np.expand_dims(image, axis=0), [mask], predictions)
+    plot_compare_masks(np.expand_dims(image, axis=0), [mask], predictions)
 
 def main():
     '''
@@ -323,11 +387,11 @@ def main():
             for z in range(0, 5):
                 i = '{}_{}_{}'.format(x, y, z)
                 image_ids.insert(random.randint(0, len(image_ids)), i)
-    '''
     image_ids = ['6100_2_3', '6120_2_2', '6120_2_0', '6100_1_3',
                  '6110_4_0', '6140_3_1', '6110_1_2', '6140_1_2',
                  '6110_3_1', '6060_2_3', '6070_2_3', '6100_2_2']
-    #image_ids = ['6100_2_3']
+    '''
+    image_ids = ['6100_2_3']
     image_type = 'M'
     models = ['svm']
     sizes = [100]
@@ -347,6 +411,7 @@ def main():
     #save_results(results)
 
 if __name__ == '__main__':
-    #main()
-    make_proposal_graphic()
+    experiment_name = 'feature_dev01'
+    model_name = 'svm'
+    experiment(experiment_name, model_name)
 
