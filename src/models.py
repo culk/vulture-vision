@@ -2,7 +2,6 @@ from keras.models import Model
 from keras import layers
 from keras.optimizers import Adam
 from keras import regularizers
-#from sklearn.metrics import r2_score
 from keras import backend as K
 
 '''
