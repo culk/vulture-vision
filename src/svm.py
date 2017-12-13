@@ -6,6 +6,7 @@ from datetime import datetime
 import csv
 import random
 from sklearn import svm, linear_model
+from skimage.transform import resize
 from itertools import combinations
 from util import *
 
@@ -269,7 +270,7 @@ def old_experiment(X, Y,
 def experiment(experiment_name, model_name, size, cv):
     print(experiment_name, model_name)
     # settings
-    do_training = True
+    do_training = False
     do_prediction = True
     ids = ['6100_2_3', '6090_2_0', '6100_2_2', '6120_2_2',
            '6120_2_0', '6150_2_3', '6070_2_3', '6100_1_3',
@@ -281,7 +282,7 @@ def experiment(experiment_name, model_name, size, cv):
     validation_split = cv
     train_stop = int(train_set_size * (1 - validation_split))
     # if loading or saving already prepped data
-    use_prepped_data = False
+    use_prepped_data = True
     data_set_size = train_set_size + test_set_size
     X_filename = 'feature_X_{}.npy'.format(data_set_size)
     Y_filename = 'feature_Y_{}.npy'.format(data_set_size)
@@ -322,10 +323,15 @@ def experiment(experiment_name, model_name, size, cv):
     else:
         model = load_model(model_filename)
     if do_prediction:
+        print("Train Scores")
+        Y_pred = model.predict(X[:train_stop].reshape(-1, features))
+        compare_class_scores(Y[:train_stop].flatten(), Y_pred)
+        print("Test Scores")
         X_test = X[train_stop:]
         Y_test = Y[train_stop:]
         Y_pred = model.predict(X_test.reshape(-1, features))
         compare_class_scores(Y_test.flatten(), Y_pred)
+        make_poster_graphic(model, mean, std, kernel_size)
         # TODO: fix this function to visualize
         #plot_compare_masks(X[train_stop:], Y[train_stop:], Y_pred)
 
@@ -405,6 +411,18 @@ def make_proposal_graphic():
     predictions = [prediction.reshape(H, W)]
     plot_compare_masks(np.expand_dims(image, axis=0), [mask], predictions)
 
+def make_poster_graphic(model, mean, std, kernel_size):
+    image_id = '6100_1_3'
+    image = load_image(image_id, 'M')
+    image = np.dstack((image, get_laplacian(image, kernel_size),
+                       get_gaussian(image, kernel_size)))
+    X = (image - mean) / std
+    H, W, features = X.shape
+    Y = create_mask(image_id, H, W, classes=[0, 1, 2, 3, 4, 5, 6, 7])
+    Y_pred = model.predict(X.reshape(-1, features))
+    Y_pred = Y_pred.reshape(H, W)
+    plot_compare_features(Y, Y_pred)
+
 def main():
     '''
     image_ids = []
@@ -438,27 +456,10 @@ def main():
 
 if __name__ == '__main__':
     cv = .2
-    experiment_name = 'small_01'
-    model_name = 'logistic'
-    size = 500
-    experiment(experiment_name, model_name, size, cv)
-    experiment_name = 'small_01'
-    model_name = 'svm'
-    size = 500
-    experiment(experiment_name, model_name, size, cv)
-    experiment_name = 'medium_01'
-    model_name = 'logistic'
-    size = 1000
-    experiment(experiment_name, model_name, size, cv)
-    experiment_name = 'medium_01'
-    model_name = 'svm'
-    size = 1000
-    experiment(experiment_name, model_name, size, cv)
-    experiment_name = 'large_01'
-    model_name = 'logistic'
+    experiment_name = 'graphic_01'
     size = 2000
+    model_name = 'logistic'
     experiment(experiment_name, model_name, size, cv)
-    experiment_name = 'large_01'
     model_name = 'svm'
-    size = 2000
+    experiment(experiment_name, model_name, size, cv)
 

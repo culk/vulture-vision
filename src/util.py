@@ -280,26 +280,14 @@ def plot_compare_census(x, y_true, y_pred):
     #plt.tight_layout(pad=0.0, w_pad=0.0, h_pad=0.0)
     plt.show()
 
-def plot_compare_census(x, y_true, y_pred):
+def plot_compare_features(y_true, y_pred):
     '''
     Plot the true and predicted masks side by side for comparison
     true, pred: lists of masks that represent the true and predicted labels
     '''
-    # TODO: consider using matplotlib.gridspec to fix plot spacing
-    assert len(y_true) == len(y_pred) and len(x) == len(y_true)
-    fig, plts = plt.subplots(len(x), 3)
-    if len(y_true) == 1:
-        plts = [plts]
-    for i, i_plt in enumerate(plts):
-        a = np.min(x[i, ..., :3])
-        b = np.max(x[i, ..., :3])
-        i_plt[0].imshow((x[i, ..., :3] - a) / (b - a))
-        i_plt[0].axis('off')
-        i_plt[1].imshow(y_true[i].squeeze())
-        i_plt[1].axis('off')
-        i_plt[2].imshow(y_pred[i].squeeze())
-        i_plt[2].axis('off')
-    #plt.tight_layout(pad=0.0, w_pad=0.0, h_pad=0.0)
+    plt.imshow(y_true, cmap='Paired')
+    plt.show()
+    plt.imshow(y_pred, cmap='Paired')
     plt.show()
 
 def plot_image(image):
