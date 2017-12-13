@@ -8,15 +8,7 @@ import random
 from sklearn import svm, linear_model
 from skimage.transform import resize
 from itertools import combinations
-from util import *
-
-# TODO:
-# - expand to all bands
-# - add regularization
-# - improve models, move to other file
-# - fix the way that images are noremalized
-# - fix the way train/cv/test sets are created
-# - make pretty image showing output/input
+from helper import *
 
 model_dir = '/media/sf_school/project/models/'
 results_dir = '/media/sf_school/project/results/'
@@ -72,7 +64,7 @@ def prep_data(ids, data_set_size, kernel_size):
     print(X.shape, np.min(X), np.max(X), np.mean(X), np.std(X), X.dtype)
     print(Y.shape, Y.dtype)
     # TODO: weight the sub_images?
-    N, *_ = Y.shape
+    N = Y.shape[0]
     selection = np.random.choice(N, size=data_set_size, replace=False)
     X = X[selection]
     Y = Y[selection]
@@ -98,8 +90,6 @@ def save_results(results):
 '''
 Features
 '''
-#cv2.getGaborKernel(ksize, sigma, theta, lambd, gamma[, psi[, ktype]])
-
 def get_laplacian(image, size=3):
     # check if grayscale (only 1 band)
     if len(image.shape) == 2:
@@ -168,31 +158,81 @@ def compare_class_scores(true, pred):
 '''
 Experiments
 '''
-def create_cv(X, Y, k):
-    # attempt at writing a function to generate cv data sets
-    # TODO: test this
-    N, H, W, D = X.shape
-    validation_size = N // k
-    train_size = N - validation_size
-    X_splits = np.asarray(np.array_split(X, k))
-    Y_splits = np.asarray(np.array_split(Y, k))
-    X_train = np.zeros((k, train_size, H, W, D))
-    Y_train = np.zeros((k, train_size, H, W), dtype=np.int)
-    X_validate = np.zeros((k, validation_size, H, W, D))
-    Y_validate = np.zeros((k, validation_size, H, W), dtype=np.int)
-    for i in range(k):
-        X_train[i] = X[np.arange(k) != i].reshape(train_size, H, W, D)
-        X_validate[i] = X[i]
-        Y_train[i] = Y[np.arange(k) != i].reshape(train_size, H, W)
-        Y_validate[i] = Y[i]
+def experiment(experiment_name, model_name, size, cv):
+    print(experiment_name, model_name)
+    # settings
+    do_training = False
+    do_prediction = True
+    ids = ['6100_2_3', '6090_2_0', '6100_2_2', '6120_2_2',
+           '6120_2_0', '6150_2_3', '6070_2_3', '6100_1_3',
+           '6010_4_2', '6110_4_0', '6140_3_1', '6110_1_2',
+           '6140_1_2', '6110_3_1', '6170_2_4', '6060_2_3']
+    kernel_size = 15
+    train_set_size = size
+    test_set_size = 0
+    validation_split = cv
+    train_stop = int(train_set_size * (1 - validation_split))
+    # if loading or saving already prepped data
+    use_prepped_data = True
+    data_set_size = train_set_size + test_set_size
+    X_filename = 'feature_X_{}.npy'.format(data_set_size)
+    Y_filename = 'feature_Y_{}.npy'.format(data_set_size)
+    model_filename = 'feature_{}_{}.pkl'.format(model_name, data_set_size)
+    # load images and their masks
+    if use_prepped_data:
+        X = load_data(X_filename)
+        Y = load_data(Y_filename)
+    else:
+        X, Y = prep_data(ids, data_set_size, kernel_size)
+        save_data(X, X_filename)
+        save_data(Y, Y_filename)
+    # make train, dev, test and normalize
+    #X_test = X[-test_set_size:]
+    #Y_test = Y[-test_set_size:]
+    #X = X[:train_set_size]
+    #Y = Y[:train_set_size]
+    mean = np.mean(X[:train_stop], axis=(0, 1, 2))
+    std = np.std(X[:train_stop], axis=(0, 1, 2))
+    X = (X - mean) / std
+    *_, features = X.shape
+    #X_test = (X_test - mean) / std
+    print(X.shape, np.min(X), np.max(X), np.mean(X), np.std(X), X.dtype)
+    print(Y.shape, Y.dtype)
+    #print(X_test.shape, np.min(X_test), np.max(X_test), np.mean(X_test), X_test.dtype)
+    #print(Y_test.shape, np.min(Y_test), np.max(Y_test), np.mean(Y_test), Y_test.dtype)
+    # load the model
+    if do_training:
+        if model_name == 'svm':
+            model = create_svm_model()
+        elif model_name == 'logistic':
+            model = create_logistic_model()
+        print(X[:train_stop].reshape(-1, features).shape)
+        print(Y[:train_stop].flatten().shape)
+        model.fit(X[:train_stop].reshape(-1, features),
+                  Y[:train_stop].flatten())
+        save_model(model, model_filename)
+    else:
+        model = load_model(model_filename)
+    if do_prediction:
+        print("Train Scores")
+        Y_pred = model.predict(X[:train_stop].reshape(-1, features))
+        compare_class_scores(Y[:train_stop].flatten(), Y_pred)
+        print("Test Scores")
+        X_test = X[train_stop:]
+        Y_test = Y[train_stop:]
+        Y_pred = model.predict(X_test.reshape(-1, features))
+        compare_class_scores(Y_test.flatten(), Y_pred)
+        make_poster_graphic(model, mean, std, kernel_size)
 
-def old_experiment(X, Y,
-               models=('svm',),
-               sizes=[10],
-               #sizes=[10, 25, 50, 100, 200, 500, 1000], #have 1600 in total right now
-               features=(get_laplacian, get_gaussian),
-               k=5):
+def dev_experiment(X, Y,
+                   models=('svm',),
+                   sizes=[10],
+                   #sizes=[10, 25, 50, 100, 200, 500, 1000], #have 1600 in total right now
+                   features=(get_laplacian, get_gaussian),
+                   k=5):
     '''
+    Old experiments run when still testing model implementations.
+    These experiments were used when generating results for milestone submission.
     Do experiments for all combinations of settings
     Input:
     X - numpy array of the images of shape (num_subimages, H, W, D)
@@ -267,74 +307,6 @@ def old_experiment(X, Y,
         print(results)
         #save_results(results)
 
-def experiment(experiment_name, model_name, size, cv):
-    print(experiment_name, model_name)
-    # settings
-    do_training = False
-    do_prediction = True
-    ids = ['6100_2_3', '6090_2_0', '6100_2_2', '6120_2_2',
-           '6120_2_0', '6150_2_3', '6070_2_3', '6100_1_3',
-           '6010_4_2', '6110_4_0', '6140_3_1', '6110_1_2',
-           '6140_1_2', '6110_3_1', '6170_2_4', '6060_2_3']
-    kernel_size = 15
-    train_set_size = size
-    test_set_size = 0
-    validation_split = cv
-    train_stop = int(train_set_size * (1 - validation_split))
-    # if loading or saving already prepped data
-    use_prepped_data = True
-    data_set_size = train_set_size + test_set_size
-    X_filename = 'feature_X_{}.npy'.format(data_set_size)
-    Y_filename = 'feature_Y_{}.npy'.format(data_set_size)
-    model_filename = 'feature_{}_{}.pkl'.format(model_name, data_set_size)
-    # load images and their masks
-    if use_prepped_data:
-        X = load_data(X_filename)
-        Y = load_data(Y_filename)
-    else:
-        X, Y = prep_data(ids, data_set_size, kernel_size)
-        save_data(X, X_filename)
-        save_data(Y, Y_filename)
-    # make train, dev, test and normalize
-    #X_test = X[-test_set_size:]
-    #Y_test = Y[-test_set_size:]
-    #X = X[:train_set_size]
-    #Y = Y[:train_set_size]
-    mean = np.mean(X[:train_stop], axis=(0, 1, 2))
-    std = np.std(X[:train_stop], axis=(0, 1, 2))
-    X = (X - mean) / std
-    *_, features = X.shape
-    #X_test = (X_test - mean) / std
-    print(X.shape, np.min(X), np.max(X), np.mean(X), np.std(X), X.dtype)
-    print(Y.shape, Y.dtype)
-    #print(X_test.shape, np.min(X_test), np.max(X_test), np.mean(X_test), X_test.dtype)
-    #print(Y_test.shape, np.min(Y_test), np.max(Y_test), np.mean(Y_test), Y_test.dtype)
-    # load the model
-    if do_training:
-        if model_name == 'svm':
-            model = create_svm_model()
-        elif model_name == 'logistic':
-            model = create_logistic_model()
-        print(X[:train_stop].reshape(-1, features).shape)
-        print(Y[:train_stop].flatten().shape)
-        model.fit(X[:train_stop].reshape(-1, features),
-                  Y[:train_stop].flatten())
-        save_model(model, model_filename)
-    else:
-        model = load_model(model_filename)
-    if do_prediction:
-        print("Train Scores")
-        Y_pred = model.predict(X[:train_stop].reshape(-1, features))
-        compare_class_scores(Y[:train_stop].flatten(), Y_pred)
-        print("Test Scores")
-        X_test = X[train_stop:]
-        Y_test = Y[train_stop:]
-        Y_pred = model.predict(X_test.reshape(-1, features))
-        compare_class_scores(Y_test.flatten(), Y_pred)
-        make_poster_graphic(model, mean, std, kernel_size)
-        # TODO: fix this function to visualize
-        #plot_compare_masks(X[train_stop:], Y[train_stop:], Y_pred)
-
 def baseline():
     '''
     Simple SVM baseline to predict building footprints
@@ -393,6 +365,9 @@ def baseline():
     print('Ploting predictions')
     plot_compare_masks(true, predictions)
 
+'''
+Visualizations
+'''
 def make_proposal_graphic():
     image_id = '6100_2_3'
     image_type = 'M'
@@ -423,6 +398,9 @@ def make_poster_graphic(model, mean, std, kernel_size):
     Y_pred = Y_pred.reshape(H, W)
     plot_compare_features(Y, Y_pred)
 
+'''
+Main
+'''
 def main():
     '''
     image_ids = []
@@ -450,8 +428,8 @@ def main():
     else:
         data = load_data()
         labels = load_data(labels=True)
-    experiment(data, labels, models, sizes, features)
-    #results = experiment(data, labels, models, sizes, features)
+    dev_experiment(data, labels, models, sizes, features)
+    #results = dev_experiment(data, labels, models, sizes, features)
     #save_results(results)
 
 if __name__ == '__main__':
